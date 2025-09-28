@@ -1,5 +1,3 @@
-
-
 import {
   Liquidity,
   LIQUIDITY_STATE_LAYOUT_V4,
@@ -13,6 +11,18 @@ import {
   Connection,
   PublicKey,
 } from '@solana/web3.js'
+
+interface DexScreenerPair {
+  dexId: string;
+  pairAddress: string;
+  quoteToken: {
+    address: string;
+  };
+}
+
+interface DexScreenerResponse {
+  pairs: DexScreenerPair[];
+}
 
 async function _formatAmmKeysById(id: string, connection: Connection): Promise<ApiPoolInfoV4> {
   const account = await connection.getAccountInfo(new PublicKey(id))
@@ -68,12 +78,22 @@ export const getPoolKeys = async (connection: Connection, baseMint: PublicKey) =
         'Content-Type': 'application/json'
       }
     })
-    const data = await res.clone().json()
-    if (data.pairs.length == 0) {
+    
+    const data = await res.json() as DexScreenerResponse;
+    
+    if (!data.pairs || data.pairs.length === 0) {
       return null
     } else {
-      const raydiumPairId = data.pairs.filter((pair: any) => pair.dexId === "raydium" && pair.quoteToken.address == NATIVE_MINT.toBase58())[0].pairAddress
-      const poolState = await _formatAmmKeysById(raydiumPairId, connection)
+      const raydiumPair = data.pairs.find((pair: DexScreenerPair) => 
+        pair.dexId === "raydium" && 
+        pair.quoteToken.address === NATIVE_MINT.toBase58()
+      );
+      
+      if (!raydiumPair) {
+        return null;
+      }
+      
+      const poolState = await _formatAmmKeysById(raydiumPair.pairAddress, connection)
       return poolState
     }
   } catch (e) {
@@ -81,4 +101,3 @@ export const getPoolKeys = async (connection: Connection, baseMint: PublicKey) =
     return null
   }
 }
-

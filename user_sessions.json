@@ -1,0 +1,100 @@
+{
+  "7040052003": {
+    "userId": 7040052003,
+    "chatId": 7040052003,
+    "status": "token_set",
+    "requiredDeposit": 0.1,
+    "isMonitoring": true,
+    "botRunning": false,
+    "tradingWallets": [
+      {
+        "address": "AzEJprJFRUe9nzuM7k2FznMs37nSfBkDospteyasYiDA",
+        "privateKey": "2xYY2WzJR2VCTLAEe9CcK7hykM9vSiBjmSrwnhLmcxAVg5iMKxpJsxXa8FnpeHm35w1NstA6TTzK75q1bR6GBP4x"
+      },
+      {
+        "address": "9W4WpjwBTXACKhgK1Cydi6JHZdx6hMty1mGw9NVp9mfr",
+        "privateKey": "29FZxKKPVkZuULC2P7uEef8PTLx1bzVigdTxso4WKbVoJ6tE8FWWNW4qZqLAwqo8Y466mAT77kC31cfRi3iJQ7pg"
+      },
+      {
+        "address": "6Ynniut5yvzD2VV3KKEg4BiU1CLRsHsx4YWphXLz4mbK",
+        "privateKey": "61iTYwNrGohYW4ACynLmcfhrCyD6ftTKinckE1Np2n9GdjUymCYRr23nypsP92QXuQjhRq4sXQ1CeM1cYzFixDgq"
+      },
+      {
+        "address": "5FZKMGkHTUhGomWSrTCJbewnPWUebBJEy15yGm7hjgtX",
+        "privateKey": "m3tf7TyXFmhpLLkxd5JS5EGxa6ps3uueJeqUatEvcaJjUNT21W3Hsvc1rXgrxmjec9qARntqPRTxdoh7qLXDFbm"
+      }
+    ],
+    "createdAt": 1758809801603,
+    "tradingStats": {
+      "totalBuys": 0,
+      "totalSells": 0,
+      "totalVolumeSOL": 0,
+      "successfulTxs": 0,
+      "failedTxs": 1,
+      "startTime": 1758981529021,
+      "lastActivity": 1758981529021,
+      "lastUpdateSent": 1758981529021
+    },
+    "walletKeypair": "3KuPBJQ71DKXfXJTkXs2ERQCzMwtpDTRchEa3f53vKLSabx3qKxcexHMdoQj9dVVPXpyPi1sMXqDXt3SG9PGF4ps",
+    "depositAddress": "5eD78sYp5RmCcsG5gBtGN3FBahvvcb12epKX67NZtCm9",
+    "tokenAddress": "GX6mwHTV9F28Zh53DnFAzwXp8jV8TXeBwXLSev3QX18Z",
+    "tokenName": "Unknown Token",
+    "tokenSymbol": "UNKNOWN",
+    "paymentWallet": "CuqRyTgKJt9tC1CvKFELgpocAfaH5PWcq4JpN99bhBsr",
+    "paymentWalletPrivateKey": "62Za3jvoSbkA5KTea3V3arGwgAxxxHju2Te2L4o3zUSejyV4GjP3cjCHm4jLNCvfiFGzwj5nMze3C3r3EsKWM5PJ",
+    "hasPaid": true,
+    "paymentConfirmed": true,
+    "selectedWalletCount": 4,
+    "awaitingWithdrawalAddress": false
+  },
+  "7939474370": {
+    "userId": 7939474370,
+    "chatId": 7939474370,
+    "status": "stopped",
+    "requiredDeposit": 0.1,
+    "isMonitoring": false,
+    "botRunning": false,
+    "tradingWallets": [
+      {
+        "address": "GBLVEpKXnAZu6TRXigedLfhPXxRbQdSzsa5kk1vQqWUN",
+        "privateKey": "4Y45RQ1ZrcFC5dqmcUExL7hx2jfzuSkZ8UtM4KHXbUGKnkbQMtkHzLc5jpeSKPthM6EhBECWAceQxJ8orguRSv6S"
+      },
+      {
+        "address": "Et4aGscyeWQSo6o2tjBWUEqm3T6cTej4s6XrfkD9UgwC",
+        "privateKey": "3Spf5NsCKKxLTYWwhYFcWKAncMjAG3AXwsnVZ8jCQc4dfrd6g3hB19tNWZoyjYsFJ2XDhbojNGhncs1jQQ4MdHVc"
+      },
+      {
+        "address": "FEM47ESmPcHDsP7vNmckuHWto7h7VFkCgLTeHmm9WXGe",
+        "privateKey": "5SAEpgV5zKju5KRaCC2gud2EhrJpkhA7Vqs5UMHCyguzGTUgBY5kcZ8DjrCHsR9aH7wBnSuf49jSdWFYfC5gL7Sa"
+      },
+      {
+        "address": "HzPUGWUGLoy4H5hthUy5DZo8brFoxFuU1E1JNMou3FEh",
+        "privateKey": "39Pp8uzyBSfSCdRtP7aiMVhTUjxtqqgrusjZBAeTjftm6UF1ncu7LgKQLHXQjhzMKRy65Hjco2yt6pnvTxWrx2Q1"
+      }
+    ],
+    "createdAt": 1758977754974,
+    "tradingStats": {
+      "totalBuys": 4,
+      "totalSells": 2,
+      "totalVolumeSOL": 0.004834,
+      "successfulTxs": 6,
+      "failedTxs": 0,
+      "startTime": 1758986137095,
+      "lastActivity": 1758986183137,
+      "lastUpdateSent": 1758986137095
+    },
+    "hasPaid": true,
+    "paymentWallet": "9WGvMfM4sbhmqZRv7kqZvLGVwSJLjEB3wNe87qhJbu8s",
+    "paymentWalletPrivateKey": "5uFdciDQnditXvt6cjSPuyjhecawV8nMm4wxGWed1skRS9MCBwDcx7umnEjXzBAWJxRvdo1Z4MM8dGRLFDoswi79",
+    "paymentAmount": 0.5,
+    "paymentConfirmed": true,
+    "selectedWalletCount": 4,
+    "walletKeypair": "5o5Wp5nB4dWs56vVSEuAhkf5yFuUDwDE7nid4j9XzLvf5yVHwqMVr4DHBHQGooGMhwRh7Zs3FB7xjP2axDECb3z5",
+    "depositAddress": "GX6mwHTV9F28Zh53DnFAzwXp8jV8TXeBwXLSev3QX18Z",
+    "userWalletPrivateKey": "5o5Wp5nB4dWs56vVSEuAhkf5yFuUDwDE7nid4j9XzLvf5yVHwqMVr4DHBHQGooGMhwRh7Zs3FB7xjP2axDECb3z5",
+    "tokenAddress": "5koVHrzvWjHDrhEg4m7HcauSyWDUuHREvs1HDR6Vbonk",
+    "tokenName": "Nala Cat “Shark Cat”",
+    "tokenSymbol": "SharkCat",
+    "awaitingWithdrawalAddress": false
+  }
+}

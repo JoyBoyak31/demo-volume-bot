@@ -53,7 +53,6 @@ async function getWalletTokenAccount(connection: Connection, wallet: PublicKey):
   }));
 }
 
-
 async function swapOnlyAmm(connection: Connection, input: TestTxInputInfo) {
   // -------- pre-action: get pool info --------
   const targetPoolInfo = await formatAmmKeysById(connection, input.targetPool)
@@ -135,7 +134,6 @@ export async function formatAmmKeysById(connection: Connection, id: string): Pro
 }
 
 export async function getBuyTx(solanaConnection: Connection, wallet: Keypair, baseMint: PublicKey, quoteMint: PublicKey, amount: number, targetPool: string) {
-
   const baseInfo = await getMint(solanaConnection, baseMint)
   if (baseInfo == null) {
     return null
@@ -214,6 +212,11 @@ export async function getSellTx(solanaConnection: Connection, wallet: Keypair, b
   }
 }
 
+// Jupiter API response interfaces
+interface JupiterQuoteResponse {
+  swapTransaction: string;
+  [key: string]: any;
+}
 
 export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: number) => {
   try {
@@ -225,7 +228,7 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
     ).json();
 
     // get serialized transactions for the swap
-    const { swapTransaction } = await (
+    const response = await (
       await fetch("https://quote-api.jup.ag/v6/swap", {
         method: "POST",
         headers: {
@@ -239,11 +242,11 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
           prioritizationFeeLamports: 52000
         }),
       })
-    ).json();
+    ).json() as JupiterQuoteResponse;
 
     // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(swapTransaction, "base64");
-    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    const swapTransactionBuf = Buffer.from(response.swapTransaction, "base64");
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
 
     // sign the transaction
     transaction.sign([wallet]);
@@ -254,7 +257,6 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
   }
 };
 
-
 export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: string) => {
   try {
     const quoteResponse = await (
@@ -264,7 +266,7 @@ export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey,
     ).json();
 
     // get serialized transactions for the swap
-    const { swapTransaction } = await (
+    const response = await (
       await fetch("https://quote-api.jup.ag/v6/swap", {
         method: "POST",
         headers: {
@@ -278,11 +280,11 @@ export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey,
           prioritizationFeeLamports: 52000
         }),
       })
-    ).json();
+    ).json() as JupiterQuoteResponse;
 
     // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(swapTransaction, "base64");
-    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    const swapTransactionBuf = Buffer.from(response.swapTransaction, "base64");
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
 
     // sign the transaction
     transaction.sign([wallet]);
