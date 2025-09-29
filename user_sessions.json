@@ -2,50 +2,33 @@
   "7040052003": {
     "userId": 7040052003,
     "chatId": 7040052003,
-    "status": "token_set",
+    "status": "stopped",
     "requiredDeposit": 0.1,
     "isMonitoring": true,
     "botRunning": false,
-    "tradingWallets": [
-      {
-        "address": "AzEJprJFRUe9nzuM7k2FznMs37nSfBkDospteyasYiDA",
-        "privateKey": "2xYY2WzJR2VCTLAEe9CcK7hykM9vSiBjmSrwnhLmcxAVg5iMKxpJsxXa8FnpeHm35w1NstA6TTzK75q1bR6GBP4x"
-      },
-      {
-        "address": "9W4WpjwBTXACKhgK1Cydi6JHZdx6hMty1mGw9NVp9mfr",
-        "privateKey": "29FZxKKPVkZuULC2P7uEef8PTLx1bzVigdTxso4WKbVoJ6tE8FWWNW4qZqLAwqo8Y466mAT77kC31cfRi3iJQ7pg"
-      },
-      {
-        "address": "6Ynniut5yvzD2VV3KKEg4BiU1CLRsHsx4YWphXLz4mbK",
-        "privateKey": "61iTYwNrGohYW4ACynLmcfhrCyD6ftTKinckE1Np2n9GdjUymCYRr23nypsP92QXuQjhRq4sXQ1CeM1cYzFixDgq"
-      },
-      {
-        "address": "5FZKMGkHTUhGomWSrTCJbewnPWUebBJEy15yGm7hjgtX",
-        "privateKey": "m3tf7TyXFmhpLLkxd5JS5EGxa6ps3uueJeqUatEvcaJjUNT21W3Hsvc1rXgrxmjec9qARntqPRTxdoh7qLXDFbm"
-      }
-    ],
+    "tradingWallets": [],
     "createdAt": 1758809801603,
     "tradingStats": {
       "totalBuys": 0,
       "totalSells": 0,
       "totalVolumeSOL": 0,
       "successfulTxs": 0,
-      "failedTxs": 1,
-      "startTime": 1758981529021,
-      "lastActivity": 1758981529021,
-      "lastUpdateSent": 1758981529021
+      "failedTxs": 0,
+      "startTime": 1759155953678,
+      "lastActivity": 1759155953678,
+      "lastUpdateSent": 1759155993667
     },
     "walletKeypair": "3KuPBJQ71DKXfXJTkXs2ERQCzMwtpDTRchEa3f53vKLSabx3qKxcexHMdoQj9dVVPXpyPi1sMXqDXt3SG9PGF4ps",
     "depositAddress": "5eD78sYp5RmCcsG5gBtGN3FBahvvcb12epKX67NZtCm9",
-    "tokenAddress": "GX6mwHTV9F28Zh53DnFAzwXp8jV8TXeBwXLSev3QX18Z",
-    "tokenName": "Unknown Token",
-    "tokenSymbol": "UNKNOWN",
     "paymentWallet": "CuqRyTgKJt9tC1CvKFELgpocAfaH5PWcq4JpN99bhBsr",
     "paymentWalletPrivateKey": "62Za3jvoSbkA5KTea3V3arGwgAxxxHju2Te2L4o3zUSejyV4GjP3cjCHm4jLNCvfiFGzwj5nMze3C3r3EsKWM5PJ",
     "hasPaid": true,
     "paymentConfirmed": true,
     "selectedWalletCount": 4,
-    "awaitingWithdrawalAddress": false
+    "awaitingWithdrawalAddress": false,
+    "tokenAddress": "ncpZnuq241W3wuYcQF9paRz3yASMXN3fLkuVbuaNATH",
+    "tokenName": "Nurse Lives Matter",
+    "tokenSymbol": "nurses"
   },
   "7939474370": {
     "userId": 7939474370,

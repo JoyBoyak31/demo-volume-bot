@@ -39,7 +39,7 @@ import * as fs from 'fs'
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 let bot: TelegramBot | null = null;
 
-const PAYMENT_AMOUNT = 0.0001; // SOL required to access bot
+const PAYMENT_AMOUNT = 0.00001 ; // SOL required to access bot (fixed from 0.0001)
 
 export const solanaConnection = new Connection(RPC_ENDPOINT, {
   wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
@@ -61,7 +61,6 @@ interface TradingStats {
   lastUpdateSent: number;
 }
 
-// Add to UserSession interface
 interface UserSession {
   userId: number;
   chatId: number;
@@ -69,7 +68,7 @@ interface UserSession {
   tokenAddress?: string;
   tokenName?: string;
   tokenSymbol?: string;
-  status: 'idle' | 'payment_pending' | 'payment_confirmed' | 'wallet_created' | 'token_set' | 'wallet_selection' | 'trading' | 'stopped';
+  status: 'idle' | 'payment_pending' | 'payment_confirmed' | 'wallet_created' | 'token_set' | 'wallet_selection' | 'trading' | 'stopped' | 'awaiting_withdraw_address';
   depositAddress?: string;
   requiredDeposit: number;
   isMonitoring: boolean;
@@ -77,22 +76,19 @@ interface UserSession {
   tradingWallets: TradingWallet[];
   createdAt: number;
   tradingStats: TradingStats;
-  // Payment fields
   hasPaid: boolean;
   paymentWallet?: string;
   paymentWalletPrivateKey?: string;
   paymentAmount: number;
   paymentConfirmed: boolean;
   userWalletPrivateKey?: string;
-  // New wallet selection field
-  selectedWalletCount: number; // Number of trading wallets user selected (4-12)
+  selectedWalletCount: number;
 }
 
 const userSessions = new Map<number, UserSession>();
 const SESSION_FILE = './user_sessions.json';
 const activeTraders = new Set<number>();
 
-// Helper function to safely send messages
 function safeSendMessage(chatId: number, message: string, options?: any) {
   if (bot) {
     return bot.sendMessage(chatId, message, options);
@@ -100,7 +96,6 @@ function safeSendMessage(chatId: number, message: string, options?: any) {
   console.log('Bot not initialized, message:', message);
 }
 
-// Helper function to safely send photos
 function safeSendPhoto(chatId: number, photo: string, options?: any) {
   if (bot) {
     return bot.sendPhoto(chatId, photo, options);
@@ -137,7 +132,6 @@ function saveSessions() {
   }
 }
 
-// Wallet selection keyboard
 function getWalletSelectionKeyboard() {
   return {
     reply_markup: {
@@ -164,7 +158,6 @@ function getWalletSelectionKeyboard() {
 function getUserSession(userId: number, chatId: number): UserSession {
   let session = userSessions.get(userId);
   if (!session) {
-    // Generate payment wallet properly
     const paymentWallet = Keypair.generate();
 
     session = {
@@ -186,9 +179,8 @@ function getUserSession(userId: number, chatId: number): UserSession {
         lastActivity: 0,
         lastUpdateSent: 0
       },
-      // Payment fields - FIXED
       hasPaid: false,
-      paymentWallet: paymentWallet.publicKey.toBase58(), // Ensure this is set
+      paymentWallet: paymentWallet.publicKey.toBase58(),
       paymentWalletPrivateKey: base58.encode(paymentWallet.secretKey),
       paymentAmount: PAYMENT_AMOUNT,
       paymentConfirmed: false,
@@ -201,7 +193,6 @@ function getUserSession(userId: number, chatId: number): UserSession {
     console.log(`Created new session for user ${userId} with payment wallet: ${session.paymentWallet}`);
   }
 
-  // If existing session doesn't have payment wallet, generate one
   if (!session.paymentWallet) {
     console.log(`Fixing missing payment wallet for user ${userId}`);
     const paymentWallet = Keypair.generate();
@@ -214,7 +205,6 @@ function getUserSession(userId: number, chatId: number): UserSession {
   return session;
 }
 
-// Payment verification function
 async function checkPaymentStatus(session: UserSession): Promise<boolean> {
   if (!session.paymentWalletPrivateKey) return false;
 
@@ -230,14 +220,13 @@ async function checkPaymentStatus(session: UserSession): Promise<boolean> {
   }
 }
 
-// Payment monitoring function
 async function monitorPayment(userId: number) {
   const session = userSessions.get(userId);
   if (!session || !session.paymentWalletPrivateKey) return;
 
   let lastBalance = 0;
   let checkCount = 0;
-  const maxChecks = 240; // Check for 1 hour (240 * 15 seconds)
+  const maxChecks = 240;
 
   const checkPayment = setInterval(async () => {
     try {
@@ -253,10 +242,12 @@ async function monitorPayment(userId: number) {
       const solBalance = balance / LAMPORTS_PER_SOL;
 
       if (solBalance >= PAYMENT_AMOUNT && solBalance > lastBalance) {
-        // Payment confirmed
         currentSession.hasPaid = true;
         currentSession.paymentConfirmed = true;
-        currentSession.status = 'payment_confirmed';
+        // Keep status as payment_confirmed, don't reset to idle
+        if (currentSession.status === 'payment_pending') {
+          currentSession.status = 'payment_confirmed';
+        }
         userSessions.set(userId, currentSession);
         saveSessions();
 
@@ -267,7 +258,7 @@ async function monitorPayment(userId: number) {
           `🚀 You now have full access to the Volume Bot!\n` +
           `Use the menu below to get started:`;
 
-        safeSendMessage(currentSession.chatId, message, getMainMenuKeyboard());
+        safeSendMessage(currentSession.chatId, message, getMainMenuKeyboard(true));
         clearInterval(checkPayment);
       }
 
@@ -276,15 +267,13 @@ async function monitorPayment(userId: number) {
     } catch (error) {
       console.error('Payment monitoring error:', error);
     }
-  }, 15000); // Check every 15 seconds
+  }, 15000);
 }
 
-// Enhanced token info fetching
 async function fetchTokenInfo(tokenAddress: string): Promise<{ name: string, symbol: string }> {
   const defaultInfo = { name: 'Unknown Token', symbol: 'UNKNOWN' };
 
   try {
-    // Method 1: Try DexScreener API first
     try {
       const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
       if (dexResponse.ok) {
@@ -307,7 +296,6 @@ async function fetchTokenInfo(tokenAddress: string): Promise<{ name: string, sym
       console.log('DexScreener API failed:', e?.message || 'Unknown error');
     }
 
-    // Method 2: Try Jupiter token list
     try {
       const response = await fetch('https://tokens.jup.ag/all');
       if (response.ok) {
@@ -331,7 +319,6 @@ async function fetchTokenInfo(tokenAddress: string): Promise<{ name: string, sym
   }
 }
 
-// Main menu keyboard
 function getMainMenuKeyboard(isPaid: boolean = false) {
   if (!isPaid) {
     return {
@@ -353,35 +340,26 @@ function getMainMenuKeyboard(isPaid: boolean = false) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '🎯 Volume Booster', callback_data: 'volume_booster' },
-          { text: '💰 Trade Manager', callback_data: 'trade_manager' }
-        ],
-        [
           { text: '💳 Create Wallet', callback_data: 'create_wallet' },
           { text: '💎 Check Balance', callback_data: 'check_balance' }
         ],
         [
           { text: '🪙 Add Token', callback_data: 'add_token' },
-          { text: '📊 Status Report', callback_data: 'status_report' }
+          { text: '🎛️ Select Wallets', callback_data: 'select_wallet_count' }
         ],
         [
           { text: '🚀 Start Volume', callback_data: 'start_volume' },
           { text: '🛑 Stop Volume', callback_data: 'stop_volume' }
         ],
         [
-          { text: '💸 Withdraw SOL', callback_data: 'withdraw_sol' },
-          { text: '🔄 Reset Session', callback_data: 'reset_session' }
-        ],
-        [
-          { text: '📱 Social Media', callback_data: 'social_media' },
-          { text: '📖 Tutorial', callback_data: 'tutorial' }
+          { text: '📊 Status Report', callback_data: 'status_report' },
+          { text: '💸 Withdraw SOL', callback_data: 'withdraw_sol' }
         ]
       ]
     }
   };
 }
 
-// Function to check if user has paid
 function requirePayment(session: UserSession, chatId: number, action: string): boolean {
   if (!session.hasPaid || !session.paymentConfirmed) {
     const message =
@@ -397,35 +375,13 @@ function requirePayment(session: UserSession, chatId: number, action: string): b
   return true;
 }
 
-// Social media keyboard
-function getSocialMediaKeyboard() {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '🌐 Website', url: 'https://orbitbot.website' },
-          { text: '🐦 Twitter', url: 'https://twitter.com/orbitbot' }
-        ],
-        [
-          { text: '📱 Telegram', url: 'https://t.me/orbitbot' },
-          { text: '💬 Support', url: 'https://t.me/orbitsupport' }
-        ],
-        [
-          { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
-        ]
-      ]
-    }
-  };
-}
-
-// Trading controls keyboard
 function getTradingControlsKeyboard(isTrading: boolean) {
   if (isTrading) {
     return {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🛑 Stop Trading', callback_data: 'stop_trading' },
+            { text: '🛑 Stop Trading', callback_data: 'stop_volume' },
             { text: '📊 Live Stats', callback_data: 'live_stats' }
           ],
           [
@@ -439,7 +395,7 @@ function getTradingControlsKeyboard(isTrading: boolean) {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🚀 Start Trading', callback_data: 'start_trading' },
+            { text: '🚀 Start Trading', callback_data: 'start_volume' },
             { text: '📊 Status Report', callback_data: 'status_report' }
           ],
           [
@@ -507,17 +463,6 @@ function sendPeriodicUpdate(session: UserSession) {
   saveSessions();
 }
 
-function debugSession(userId: number) {
-  const session = userSessions.get(userId);
-  console.log(`Debug session for user ${userId}:`, {
-    hasSession: !!session,
-    paymentWallet: session?.paymentWallet,
-    paymentWalletPrivateKey: session?.paymentWalletPrivateKey ? 'SET' : 'NOT SET',
-    hasPaid: session?.hasPaid,
-    status: session?.status
-  });
-}
-
 if (BOT_TOKEN) {
   bot = new TelegramBot(BOT_TOKEN, {
     polling: {
@@ -534,7 +479,6 @@ if (BOT_TOKEN) {
   loadSessions();
   console.log('Enhanced Telegram Volume Bot is running...');
 
-  // START Command with enhanced UI
   bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id!;
@@ -542,10 +486,8 @@ if (BOT_TOKEN) {
 
     const session = getUserSession(userId, chatId);
 
-    // Debug log
     console.log(`User ${userId} started bot. Payment wallet: ${session.paymentWallet}`);
 
-    // Check if user has already paid
     if (session.hasPaid && session.paymentConfirmed) {
       const welcomeMessage =
         `🚀 Welcome back ${firstName}!\n\n` +
@@ -572,7 +514,6 @@ if (BOT_TOKEN) {
     }
   });
 
-  // Callback query handler for inline keyboards
   bot.on('callback_query', async (callbackQuery) => {
     const msg = callbackQuery.message;
     const data = callbackQuery.data;
@@ -586,7 +527,6 @@ if (BOT_TOKEN) {
 
     switch (data) {
       case 'make_payment':
-        // Ensure payment wallet exists
         if (!session.paymentWallet) {
           console.log(`Generating missing payment wallet for user ${userId}`);
           const paymentWallet = Keypair.generate();
@@ -622,9 +562,10 @@ if (BOT_TOKEN) {
           }
         });
 
-        // Start monitoring payment
         if (!session.isMonitoring) {
           session.isMonitoring = true;
+          session.status = 'payment_pending';
+          saveSessions();
           monitorPayment(userId);
         }
         break;
@@ -732,6 +673,7 @@ if (BOT_TOKEN) {
         break;
 
       case 'back_to_start':
+        // Don't reset payment status when going back
         const startMessage = session.hasPaid ?
           `🏠 Main Menu\n\nWelcome back! Choose what you'd like to do:` :
           `🚀 Volume Bot 2.0\n\nProfessional trading tool requires payment to access.\n\nMake payment to unlock all features:`;
@@ -740,41 +682,6 @@ if (BOT_TOKEN) {
           chat_id: chatId,
           message_id: msg?.message_id,
           ...getMainMenuKeyboard(session.hasPaid)
-        });
-        break;
-
-      case 'volume_booster':
-        if (!requirePayment(session, chatId, 'Volume Booster')) return;
-
-        const volumeMessage =
-          `🎯 Volume Booster 2.0\n\n` +
-          `Professional volume generation system:\n\n` +
-          `📊 Multi-wallet trading\n` +
-          `⚡ Lightning-fast execution\n` +
-          `📈 Real-time analytics\n` +
-          `🔄 Automated buy/sell cycles\n\n` +
-          `Status: ${session.botRunning ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n` +
-          `Token: ${session.tokenSymbol || 'Not set'}\n` +
-          `Wallets: ${session.selectedWalletCount} selected`;
-
-        bot.editMessageText(volumeMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '🎛️ Select Wallets', callback_data: 'select_wallet_count' },
-                { text: '🚀 Start Volume', callback_data: 'start_volume' }
-              ],
-              [
-                { text: '🛑 Stop Volume', callback_data: 'stop_volume' },
-                { text: '📊 Live Stats', callback_data: 'live_stats' }
-              ],
-              [
-                { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
-              ]
-            ]
-          }
         });
         break;
 
@@ -833,43 +740,6 @@ if (BOT_TOKEN) {
         });
         break;
 
-      case 'trade_manager':
-        if (!requirePayment(session, chatId, 'Trade Manager')) return;
-
-        const tradeMessage =
-          `💰 Trade Manager\n\n` +
-          `Advanced multi-wallet trading system:\n\n` +
-          `💳 Wallet: ${session.depositAddress ? '✅ Created' : '❌ Not created'}\n` +
-          `🪙 Token: ${session.tokenName || 'Not set'}\n` +
-          `💎 Balance: ${session.depositAddress ? 'Click to check' : 'N/A'}\n` +
-          `📊 Trading Wallets: ${session.selectedWalletCount} selected\n` +
-          `🎛️ Wallet Status: ${session.tradingWallets.length > 0 ? `${session.tradingWallets.length} distributed` : 'Not distributed'}\n\n` +
-          `Next steps: ${!session.walletKeypair ? 'Create wallet' : !session.tokenAddress ? 'Add token' : 'Start volume'}`;
-
-        bot.editMessageText(tradeMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '💳 Create Wallet', callback_data: 'create_wallet' },
-                { text: '💎 Check Balance', callback_data: 'check_balance' }
-              ],
-              [
-                { text: '🎛️ Select Wallets', callback_data: 'select_wallet_count' },
-                { text: '🪙 Add Token', callback_data: 'add_token' }
-              ],
-              [
-                { text: '📊 Full Status', callback_data: 'status_report' }
-              ],
-              [
-                { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
-              ]
-            ]
-          }
-        });
-        break;
-
       case 'create_wallet':
         if (!requirePayment(session, chatId, 'Wallet Creation')) return;
         handleCreateWallet(userId, chatId, msg?.message_id);
@@ -885,9 +755,10 @@ if (BOT_TOKEN) {
         const tokenMessage =
           `🪙 Add Token\n\n` +
           `Enter the token address you want to trade:\n\n` +
-          `📝 Send the token contract address as a message\n` +
+          `📍 Send the token contract address as a message\n` +
           `🔍 Bot will validate the token automatically\n` +
           `✅ Pool verification included\n\n` +
+          `⚠️ Accepts any Solana token with liquidity\n` +
           `Example: 74Rq6Bmckiq8qvARhdqxPfQtkQsxsqVKCbDQL5PKpump`;
 
         bot.editMessageText(tokenMessage, {
@@ -912,6 +783,7 @@ if (BOT_TOKEN) {
         break;
 
       case 'back_to_menu':
+        // Preserve payment status when going back to menu
         if (!session.hasPaid) {
           const message = `🚀 Volume Bot 2.0\n\nPayment required to access features.`;
           bot.editMessageText(message, {
@@ -929,11 +801,51 @@ if (BOT_TOKEN) {
         }
         break;
 
+      default:
+        // Handle dynamic callbacks like change_token_
+        if (data && data.startsWith('change_token_')) {
+          if (!requirePayment(session, chatId, 'Change Token')) return;
+
+          const newTokenAddress = data.replace('change_token_', '');
+
+          // Stop bot if running
+          if (session.botRunning) {
+            bot.editMessageText(
+              '❌ Please stop the volume bot before changing tokens.',
+              {
+                chat_id: chatId,
+                message_id: msg?.message_id,
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: '🛑 Stop Volume', callback_data: 'stop_volume' }],
+                    [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+                  ]
+                }
+              }
+            );
+            return;
+          }
+
+          // Clear old token and trading wallets
+          session.tokenAddress = undefined;
+          session.tokenName = undefined;
+          session.tokenSymbol = undefined;
+          session.tradingWallets = [];
+          userSessions.set(userId, session);
+          saveSessions();
+
+          // Process new token
+          await handleTokenInput(userId, chatId, newTokenAddress);
+        }
+        break;
+
       case 'status_report':
+        if (!requirePayment(session, chatId, 'Status Report')) return;
         handleStatusReport(userId, chatId, msg?.message_id);
         break;
 
       case 'live_stats':
+        if (!requirePayment(session, chatId, 'Live Stats')) return;
         if (session.botRunning) {
           sendPeriodicUpdate(session);
         } else {
@@ -946,54 +858,8 @@ if (BOT_TOKEN) {
         break;
 
       case 'withdraw_sol':
+        if (!requirePayment(session, chatId, 'Withdraw SOL')) return;
         handleWithdrawCommand(userId, chatId, msg?.message_id);
-        break;
-
-      case 'reset_session':
-        handleResetSession(userId, chatId, msg?.message_id);
-        break;
-
-      case 'social_media':
-        const socialMessage =
-          `📱 Social Media & Links\n\n` +
-          `Connect with us on all platforms:\n\n` +
-          `🌐 Official Website\n` +
-          `🐦 Twitter Updates\n` +
-          `📱 Telegram Community\n` +
-          `💬 24/7 Support\n\n` +
-          `Join our community for updates and support!`;
-
-        bot.editMessageText(socialMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          ...getSocialMediaKeyboard()
-        });
-        break;
-
-      case 'tutorial':
-        const tutorialMessage =
-          `📖 Quick Tutorial\n\n` +
-          `🔥 Getting Started:\n\n` +
-          `1️⃣ Create Wallet - Generate your trading wallet\n` +
-          `2️⃣ Deposit SOL - Send SOL to your wallet address\n` +
-          `3️⃣ Add Token - Enter the token contract address\n` +
-          `4️⃣ Start Trading - Begin volume generation\n\n` +
-          `💡 Tips:\n` +
-          `• Minimum 0.1 SOL required\n` +
-          `• Use established tokens with liquidity\n` +
-          `• Monitor your statistics regularly\n` +
-          `• Stop trading before withdrawing\n\n` +
-          `⚠️ Educational tool - Use responsibly!`;
-
-        bot.editMessageText(tutorialMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-            ]
-          }
-        });
         break;
     }
   });
@@ -1015,7 +881,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle create wallet callback
   async function handleCreateWallet(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1024,7 +889,7 @@ if (BOT_TOKEN) {
         const newKeypair = Keypair.generate();
         session.walletKeypair = base58.encode(newKeypair.secretKey);
         session.depositAddress = newKeypair.publicKey.toBase58();
-        session.userWalletPrivateKey = base58.encode(newKeypair.secretKey); // Give private key to user
+        session.userWalletPrivateKey = base58.encode(newKeypair.secretKey);
         session.status = 'wallet_created';
         userSessions.set(userId, session);
         saveSessions();
@@ -1033,10 +898,10 @@ if (BOT_TOKEN) {
           `✅ Trading Wallet Created!\n\n` +
           `💳 Your Trading Address:\n` +
           `\`${session.depositAddress}\`\n\n` +
-          `🔐 Your Private Key:\n` +
+          `🔑 Your Private Key:\n` +
           `\`${session.userWalletPrivateKey}\`\n\n` +
           `⚠️ IMPORTANT: Save your private key securely!\n` +
-          `🔑 You own this wallet and can import it anywhere\n` +
+          `🔒 You own this wallet and can import it anywhere\n` +
           `💰 Use this for deposits and trading\n\n` +
           `💰 Minimum: ${session.requiredDeposit} SOL\n` +
           `💰 Recommended: 0.5-1.0 SOL`;
@@ -1068,7 +933,7 @@ if (BOT_TOKEN) {
         const message =
           `✅ You already have a trading wallet!\n\n` +
           `💳 Address: \`${session.depositAddress}\`\n` +
-          `🔐 Private Key: \`${session.userWalletPrivateKey}\`\n\n` +
+          `🔑 Private Key: \`${session.userWalletPrivateKey}\`\n\n` +
           `Use the options below to continue:`;
 
         if (messageId && bot) {
@@ -1080,7 +945,7 @@ if (BOT_TOKEN) {
               inline_keyboard: [
                 [
                   { text: '💎 Check Balance', callback_data: 'check_balance' },
-                  { text: '🔄 Reset Session', callback_data: 'reset_session' }
+                  { text: '🪙 Add Token', callback_data: 'add_token' }
                 ],
                 [
                   { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
@@ -1096,7 +961,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle check balance callback
   async function handleCheckBalance(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1127,9 +991,26 @@ if (BOT_TOKEN) {
       const balance = await solanaConnection.getBalance(keypair.publicKey);
       const solBalance = balance / LAMPORTS_PER_SOL;
 
+      // Calculate total balance including distributed wallets
+      let totalDistributed = 0;
+      if (session.tradingWallets.length > 0) {
+        for (const wallet of session.tradingWallets) {
+          try {
+            const walletBalance = await solanaConnection.getBalance(new PublicKey(wallet.address));
+            totalDistributed += walletBalance / LAMPORTS_PER_SOL;
+          } catch (e) {
+            console.log(`Error fetching balance for wallet ${wallet.address}`);
+          }
+        }
+      }
+
+      const totalBalance = solBalance + totalDistributed;
+
       const message =
         `💰 Wallet Balance Report\n\n` +
-        `💎 Balance: ${solBalance.toFixed(6)} SOL\n` +
+        `💎 Main Wallet: ${solBalance.toFixed(6)} SOL\n` +
+        `📊 Distributed: ${totalDistributed.toFixed(6)} SOL (${session.tradingWallets.length} wallets)\n` +
+        `💰 Total Balance: ${totalBalance.toFixed(6)} SOL\n` +
         `📍 Address: \`${session.depositAddress}\`\n\n` +
         `Status: ${solBalance >= session.requiredDeposit ? '✅ Ready for trading' : `❌ Need ${(session.requiredDeposit - solBalance).toFixed(4)} more SOL`}\n` +
         `Token: ${session.tokenName || 'Not set'}\n` +
@@ -1159,7 +1040,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle start trading callback
   async function handleStartVolume(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1220,8 +1100,7 @@ if (BOT_TOKEN) {
       const balance = await solanaConnection.getBalance(keypair.publicKey);
       const solBalance = balance / LAMPORTS_PER_SOL;
 
-      // Calculate required SOL based on selected wallet count
-      const requiredSol = (DISTRIBUTION_AMOUNT * session.selectedWalletCount) + 0.002; // Add buffer for fees
+      const requiredSol = (DISTRIBUTION_AMOUNT * session.selectedWalletCount) + 0.01;
 
       if (solBalance < requiredSol) {
         const message =
@@ -1306,7 +1185,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle stop trading callback
   function handleStopVolume(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1355,7 +1233,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle status report callback
   async function handleStatusReport(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1391,16 +1268,22 @@ if (BOT_TOKEN) {
 
       if (session.tradingWallets.length > 0) {
         message += `🔄 TRADING WALLETS (${session.tradingWallets.length}):\n`;
+        let totalDistributed = 0;
         for (let i = 0; i < Math.min(session.tradingWallets.length, 3); i++) {
           const wallet = session.tradingWallets[i];
           try {
             const balance = await solanaConnection.getBalance(new PublicKey(wallet.address));
             const solBalance = balance / LAMPORTS_PER_SOL;
-            message += `   ${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(-4)} (${solBalance.toFixed(4)} SOL)\n`;
+            totalDistributed += solBalance;
+            message += `   ${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 4)} (${solBalance.toFixed(4)} SOL)\n`;
           } catch {
-            message += `   ${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(-4)} (Error)\n`;
+            message += `   ${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 4)} (Error)\n`;
           }
         }
+        if (session.tradingWallets.length > 3) {
+          message += `   ... and ${session.tradingWallets.length - 3} more\n`;
+        }
+        message += `   💰 Total Distributed: ${totalDistributed.toFixed(4)} SOL\n`;
         message += `\n`;
       }
 
@@ -1417,14 +1300,14 @@ if (BOT_TOKEN) {
         if (runtime > 0) {
           message += `   📊 Avg Volume/Min: ${(stats.totalVolumeSOL / runtime).toFixed(4)} SOL\n`;
         }
-        message += `   🕒 Last Activity: ${new Date(stats.lastActivity).toLocaleTimeString()}\n\n`;
+        message += `   🕐 Last Activity: ${new Date(stats.lastActivity).toLocaleTimeString()}\n\n`;
       }
 
       message += `🤖 BOT STATUS:\n`;
       message += `   🔄 Trading: ${session.botRunning ? '🟢 ACTIVE' : '🔴 STOPPED'}\n`;
       message += `   👁️ Monitoring: ${session.isMonitoring ? '🟢 YES' : '🔴 NO'}\n\n`;
 
-      message += `📍 NEXT ACTIONS:\n`;
+      message += `📝 NEXT ACTIONS:\n`;
       if (!session.walletKeypair) {
         message += `   • Create wallet first\n`;
       } else if (!session.tokenAddress) {
@@ -1459,7 +1342,6 @@ if (BOT_TOKEN) {
     }
   }
 
-  // Handle withdraw command callback
   function handleWithdrawCommand(userId: number, chatId: number, messageId?: number) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1489,7 +1371,7 @@ if (BOT_TOKEN) {
             message_id: messageId,
             reply_markup: {
               inline_keyboard: [
-                [{ text: '🛑 Stop Trading', callback_data: 'stop_trading' }],
+                [{ text: '🛑 Stop Volume', callback_data: 'stop_volume' }],
                 [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
               ]
             }
@@ -1498,12 +1380,17 @@ if (BOT_TOKEN) {
         return;
       }
 
+      // Set status to awaiting withdraw address
+      session.status = 'awaiting_withdraw_address';
+      userSessions.set(userId, session);
+      saveSessions();
+
       const message =
         `💸 Withdraw SOL\n\n` +
         `📤 Enter the Solana address to withdraw to:\n\n` +
-        `📝 Send the destination address as a message\n` +
+        `📍 Send the destination address as a message\n` +
         `⚠️ Make sure the address is correct!\n` +
-        `💰 All available SOL will be withdrawn\n\n` +
+        `💰 All SOL from main wallet and distributed wallets will be gathered\n\n` +
         `Example: 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM`;
 
       if (messageId && bot) {
@@ -1518,113 +1405,98 @@ if (BOT_TOKEN) {
         });
       }
 
-      // Set up withdrawal listener
-      handleWithdrawSetup(userId, chatId);
-
     } catch (error: any) {
       console.error('Withdraw command error:', error);
       safeSendMessage(chatId, 'Error initiating withdrawal.');
     }
   }
 
-  // Handle reset session callback
-  function handleResetSession(userId: number, chatId: number, messageId?: number) {
-    try {
-      const session = userSessions.get(userId);
-      if (session) {
-        session.botRunning = false;
-        activeTraders.delete(userId);
-      }
-
-      userSessions.delete(userId);
-      saveSessions();
-
-      const message =
-        `🔄 Bot Session Reset!\n\n` +
-        `All data cleared:\n` +
-        `• Wallet removed\n` +
-        `• Token cleared\n` +
-        `• Trading stopped\n` +
-        `• Statistics reset\n\n` +
-        `✨ Ready for a fresh start!`;
-
-      if (messageId && bot) {
-        bot.editMessageText(message, {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '💳 Create New Wallet', callback_data: 'create_wallet' }
-              ],
-              [
-                { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
-              ]
-            ]
-          }
-        });
-      }
-    } catch (error: any) {
-      console.error('Reset error:', error);
-      safeSendMessage(chatId, 'Error resetting bot.');
-    }
-  }
-
-  // Enhanced withdrawal setup function
-  function handleWithdrawSetup(userId: number, chatId: number) {
-    const withdrawalListener = async (withdrawMsg: any) => {
-      if (withdrawMsg.chat.id !== chatId || withdrawMsg.from?.id !== userId) return;
-      if (!withdrawMsg.text || withdrawMsg.text.startsWith('/')) {
-        return; // Ignore commands
-      }
-
-      const withdrawAddress = withdrawMsg.text.trim();
-
-      try {
-        // Validate withdrawal address
-        new PublicKey(withdrawAddress);
-      } catch {
-        safeSendMessage(chatId, '❌ Invalid Solana address. Please try again or use /withdraw.');
-        if (bot) bot.removeListener('message', withdrawalListener);
-        return;
-      }
-
-      try {
-        const session = getUserSession(userId, chatId);
-        await performWithdrawal(session, withdrawAddress, chatId);
-      } catch (error: any) {
-        safeSendMessage(chatId, `❌ Withdrawal error: ${error?.message || 'Unknown error'}`);
-      }
-
-      if (bot) bot.removeListener('message', withdrawalListener);
-    };
-
-    if (bot) {
-      bot.on('message', withdrawalListener);
-
-      // Remove listener after 5 minutes
-      setTimeout(() => {
-        if (bot) bot.removeListener('message', withdrawalListener);
-      }, 300000);
-    }
-  }
-
-  // Handle text messages for token input
+  // Handle text messages for token input AND withdrawal address
+  // Handle text messages for token input AND withdrawal address
   bot.on('message', async (msg) => {
     const text = msg.text;
     const chatId = msg.chat.id;
     const userId = msg.from?.id!;
 
-    // Skip if it's a command
-    if (text && text.startsWith('/')) return;
+    // Skip if no text or it's a command
+    if (!text || text.startsWith('/')) return;
 
-    // Check if it looks like a Solana token address (44 characters, base58)
-    if (text && text.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(text)) {
-      await handleTokenInput(userId, chatId, text.trim());
+    const session = userSessions.get(userId);
+    if (!session) return;
+
+    // Skip if user hasn't paid
+    if (!session.hasPaid || !session.paymentConfirmed) {
+      return;
+    }
+
+    const trimmedText = text.trim();
+
+    // Check if it's a valid Solana address (32-44 characters, base58)
+    const isSolanaAddress = trimmedText.length >= 32 && 
+                           trimmedText.length <= 44 && 
+                           /^[1-9A-HJ-NP-Za-km-z]+$/.test(trimmedText);
+
+    if (!isSolanaAddress) {
+      // Not a valid Solana address format
+      return;
+    }
+
+    // Validate it's actually a valid PublicKey
+    let isValidPubkey = false;
+    try {
+      new PublicKey(trimmedText);
+      isValidPubkey = true;
+    } catch {
+      safeSendMessage(chatId, '❌ Invalid Solana address format.');
+      return;
+    }
+
+    // Check if user is awaiting withdrawal address
+    if (session.status === 'awaiting_withdraw_address') {
+      // Reset status immediately to prevent duplicate processing
+      session.status = 'stopped';
+      userSessions.set(userId, session);
+      saveSessions();
+      
+      await performWithdrawal(session, trimmedText, chatId);
+      return;
+    }
+
+    // Otherwise, treat it as a token address
+    if (session.walletKeypair && !session.tokenAddress) {
+      // Only process if user has wallet but no token set
+      await handleTokenInput(userId, chatId, trimmedText);
+    } else if (session.walletKeypair && session.tokenAddress) {
+      // User already has a token, confirm if they want to change it
+      safeSendMessage(chatId, 
+        `⚠️ You already have a token set:\n\n` +
+        `Current: ${session.tokenName} (${session.tokenSymbol})\n` +
+        `${session.tokenAddress}\n\n` +
+        `Do you want to change to a new token?\n` +
+        `New: ${trimmedText}`, 
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✅ Yes, Change Token', callback_data: `change_token_${trimmedText}` },
+                { text: '❌ Cancel', callback_data: 'back_to_menu' }
+              ]
+            ]
+          }
+        }
+      );
+    } else if (!session.walletKeypair) {
+      safeSendMessage(chatId, '❌ Please create a wallet first before adding a token!', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💳 Create Wallet', callback_data: 'create_wallet' }],
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      });
     }
   });
 
-  // Handle token address input
   async function handleTokenInput(userId: number, chatId: number, tokenAddress: string) {
     try {
       const session = getUserSession(userId, chatId);
@@ -1633,7 +1505,8 @@ if (BOT_TOKEN) {
         safeSendMessage(chatId, '❌ No wallet found. Create one first!', {
           reply_markup: {
             inline_keyboard: [
-              [{ text: '💳 Create Wallet', callback_data: 'create_wallet' }]
+              [{ text: '💳 Create Wallet', callback_data: 'create_wallet' }],
+              [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
             ]
           }
         });
@@ -1648,39 +1521,45 @@ if (BOT_TOKEN) {
         return;
       }
 
-      safeSendMessage(chatId, '🔍 Validating token... This may take a moment...', {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-          ]
-        }
-      });
+      // Send a single validation message
+      const validationMsg = await safeSendMessage(chatId, '🔍 Validating token... Please wait...');
 
       const { name, symbol } = await fetchTokenInfo(tokenAddress);
 
       if (!SWAP_ROUTING) {
         try {
-          safeSendMessage(chatId, '🔍 Checking for trading pool...');
           const poolKeys = await getPoolKeys(solanaConnection, tokenPubkey);
           if (!poolKeys) {
-            safeSendMessage(chatId,
-              `❌ No Raydium trading pool found for ${name} (${symbol})\n\n` +
-              `This token may:\n` +
-              `• Not have liquidity on Raydium\n` +
-              `• Be a new token without a pool\n` +
-              `• Have insufficient liquidity\n\n` +
-              `Try a different token with established liquidity.`,
-              getMainMenuKeyboard()
-            );
+            if (validationMsg && bot) {
+              bot.editMessageText(
+                `❌ No Raydium trading pool found for ${name} (${symbol})\n\n` +
+                `This token may:\n` +
+                `• Not have liquidity on Raydium\n` +
+                `• Be a new token without a pool\n` +
+                `• Have insufficient liquidity\n\n` +
+                `Try a different token with established liquidity.`,
+                {
+                  chat_id: chatId,
+                  message_id: validationMsg.message_id,
+                  ...getMainMenuKeyboard(true)
+                }
+              );
+            }
             return;
           }
           console.log('Pool validation successful:', poolKeys.id);
         } catch (poolError: any) {
-          safeSendMessage(chatId,
-            `❌ Error validating pool: ${poolError?.message || 'Unknown error'}\n\n` +
-            `Please try again or use a different token.`,
-            getMainMenuKeyboard()
-          );
+          if (validationMsg && bot) {
+            bot.editMessageText(
+              `❌ Error validating pool: ${poolError?.message || 'Unknown error'}\n\n` +
+              `Please try again or use a different token.`,
+              {
+                chat_id: chatId,
+                message_id: validationMsg.message_id,
+                ...getMainMenuKeyboard(true)
+              }
+            );
+          }
           return;
         }
       }
@@ -1701,40 +1580,32 @@ if (BOT_TOKEN) {
         `🚀 Ready for trading!\n\n` +
         `Choose your next action:`;
 
-      safeSendMessage(chatId, message, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '🚀 Start Trading', callback_data: 'start_trading' },
-              { text: '📊 Check Status', callback_data: 'status_report' }
-            ],
-            [
-              { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
+      if (validationMsg && bot) {
+        bot.editMessageText(message, {
+          chat_id: chatId,
+          message_id: validationMsg.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🚀 Start Volume', callback_data: 'start_volume' },
+                { text: '📊 Check Status', callback_data: 'status_report' }
+              ],
+              [
+                { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
+              ]
             ]
-          ]
-        }
-      });
+          }
+        });
+      }
     } catch (error: any) {
       console.error('Add token error:', error);
-      safeSendMessage(chatId, `❌ Error adding token: ${error?.message || 'Unknown error'}\n\nPlease try again.`, getMainMenuKeyboard());
+      safeSendMessage(chatId, `❌ Error adding token: ${error?.message || 'Unknown error'}\n\nPlease try again.`, getMainMenuKeyboard(true));
     }
   }
-
-  // Handle unknown commands with enhanced UI
-  bot.on('message', (msg) => {
-    const text = msg.text;
-    if (text && text.startsWith('/') && !text.match(/\/(start|wallet|balance|addtoken|starttrading|stop|status|withdraw|restart)/)) {
-      const message =
-        `❓ Unknown command: ${text}\n\n` +
-        `Use the menu below to access all features:`;
-
-      safeSendMessage(msg.chat.id, message, getMainMenuKeyboard());
-    }
-  });
 }
 
-// Withdrawal function
+// Withdrawal function with gathering from all wallets
 async function performWithdrawal(session: UserSession, withdrawAddress: string, chatId: number) {
   try {
     if (!session.walletKeypair) {
@@ -1742,26 +1613,114 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
     }
 
     const mainKp = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
-    const balance = await solanaConnection.getBalance(mainKp.publicKey);
 
-    if (balance === 0) {
-      safeSendMessage(chatId, '💰 No SOL balance to withdraw.', getMainMenuKeyboard());
+    // First, gather SOL from all distributed wallets back to main wallet
+    if (session.tradingWallets.length > 0) {
+      safeSendMessage(chatId, `⏳ Gathering SOL from ${session.tradingWallets.length} trading wallets...`);
+
+      let totalGathered = 0;
+      let successfulGathers = 0;
+
+      for (let i = 0; i < session.tradingWallets.length; i++) {
+        try {
+          const wallet = Keypair.fromSecretKey(base58.decode(session.tradingWallets[i].privateKey));
+          const balance = await solanaConnection.getBalance(wallet.publicKey);
+
+          if (balance === 0) {
+            console.log(`Wallet ${i + 1} has 0 balance, skipping...`);
+            continue;
+          }
+
+          // More conservative rent calculation
+          const rent = await solanaConnection.getMinimumBalanceForRentExemption(0);
+          // Leave more buffer: rent + 15000 lamports for transaction fee
+          const feeBuffer = 15000;
+          const transferAmount = balance - rent - feeBuffer;
+
+          if (transferAmount <= 5000) { // Skip if less than 5000 lamports (~0.000005 SOL)
+            console.log(`Wallet ${i + 1} has insufficient balance to transfer: ${balance / LAMPORTS_PER_SOL} SOL`);
+            continue;
+          }
+
+          const transaction = new Transaction().add(
+            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500_000 }),
+            ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
+            SystemProgram.transfer({
+              fromPubkey: wallet.publicKey,
+              toPubkey: mainKp.publicKey,
+              lamports: transferAmount
+            })
+          );
+
+          const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = latestBlockhash.blockhash;
+          transaction.feePayer = wallet.publicKey;
+
+          const messageV0 = new TransactionMessage({
+            payerKey: wallet.publicKey,
+            recentBlockhash: latestBlockhash.blockhash,
+            instructions: transaction.instructions,
+          }).compileToV0Message();
+
+          const versionedTx = new VersionedTransaction(messageV0);
+          versionedTx.sign([wallet]);
+
+          const sig = await execute(versionedTx, latestBlockhash);
+
+          if (sig) {
+            const gatheredAmount = transferAmount / LAMPORTS_PER_SOL;
+            totalGathered += gatheredAmount;
+            successfulGathers++;
+            console.log(`✅ Gathered from wallet ${i + 1}: ${gatheredAmount.toFixed(6)} SOL`);
+          }
+
+          // Delay between transactions to avoid rate limiting
+          await sleep(1500);
+
+        } catch (error: any) {
+          console.error(`Failed to gather from wallet ${i + 1}:`, error);
+          // Continue with other wallets even if one fails
+          continue;
+        }
+      }
+
+      if (successfulGathers > 0) {
+        safeSendMessage(chatId,
+          `✅ Gathered ${totalGathered.toFixed(6)} SOL from ${successfulGathers}/${session.tradingWallets.length} wallets!\n` +
+          `⏳ Now withdrawing total balance...`
+        );
+
+        // Wait for gathering transactions to finalize
+        await sleep(5000);
+      } else {
+        safeSendMessage(chatId,
+          `⚠️ Could not gather from distributed wallets (insufficient balance)\n` +
+          `⏳ Withdrawing from main wallet only...`
+        );
+      }
+    }
+
+    // Now withdraw from main wallet
+    const finalBalance = await solanaConnection.getBalance(mainKp.publicKey);
+
+    if (finalBalance === 0) {
+      safeSendMessage(chatId, '💰 No SOL balance to withdraw.', getMainMenuKeyboard(true));
       return;
     }
 
-    const solBalance = balance / LAMPORTS_PER_SOL;
+    const solBalance = finalBalance / LAMPORTS_PER_SOL;
     const rentExemption = await solanaConnection.getMinimumBalanceForRentExemption(0);
-    const txFee = 10000; // Estimated transaction fee in lamports
+    const txFee = 15000; // More conservative fee estimate
 
-    const withdrawableAmount = balance - rentExemption - txFee;
+    const withdrawableAmount = finalBalance - rentExemption - txFee;
 
-    if (withdrawableAmount <= 0) {
+    if (withdrawableAmount <= 5000) {
       safeSendMessage(chatId,
         `❌ Insufficient balance for withdrawal.\n\n` +
         `Current: ${solBalance.toFixed(6)} SOL\n` +
-        `Rent + Fee: ${(rentExemption + txFee) / LAMPORTS_PER_SOL} SOL\n\n` +
+        `Rent + Fee: ${((rentExemption + txFee) / LAMPORTS_PER_SOL).toFixed(6)} SOL\n\n` +
         `Cannot withdraw - balance too low.`,
-        getMainMenuKeyboard()
+        getMainMenuKeyboard(true)
       );
       return;
     }
@@ -1772,13 +1731,12 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
       `💸 Withdrawal Details:\n\n` +
       `Current Balance: ${solBalance.toFixed(6)} SOL\n` +
       `Withdrawable: ${withdrawableSol.toFixed(6)} SOL\n` +
-      `To: ${withdrawAddress.substring(0, 8)}...${withdrawAddress.substring(-4)}\n\n` +
+      `To: ${withdrawAddress.substring(0, 8)}...${withdrawAddress.substring(withdrawAddress.length - 4)}\n\n` +
       `⏳ Processing withdrawal...`
     );
 
-    // Create withdrawal transaction
     const withdrawTx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
       SystemProgram.transfer({
         fromPubkey: mainKp.publicKey,
@@ -1787,7 +1745,7 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
       })
     );
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
     withdrawTx.feePayer = mainKp.publicKey;
     withdrawTx.recentBlockhash = latestBlockhash.blockhash;
 
@@ -1803,13 +1761,20 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
     const txSig = await execute(transaction, latestBlockhash);
 
     if (txSig) {
+      // Clear trading wallets after successful withdrawal
+      session.tradingWallets = [];
+      userSessions.set(session.userId, session);
+      saveSessions();
+
       safeSendMessage(chatId,
         `✅ Withdrawal Successful!\n\n` +
         `Amount: ${withdrawableSol.toFixed(6)} SOL\n` +
         `To: ${withdrawAddress}\n` +
         `Transaction: https://solscan.io/tx/${txSig}\n\n` +
-        `Your wallet is now empty.`,
-        getMainMenuKeyboard()
+        `💡 Your main wallet still exists for future use!\n` +
+        `Trading wallets have been cleared.\n\n` +
+        `You can continue using the bot anytime.`,
+        getMainMenuKeyboard(true)
       );
 
       console.log(`Withdrawal successful for user ${session.userId}: ${withdrawableSol} SOL to ${withdrawAddress}`);
@@ -1820,11 +1785,10 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
   } catch (error: any) {
     console.error('Withdrawal error:', error);
     const errorMessage = error?.message || 'Unknown error occurred';
-    safeSendMessage(chatId, `❌ Withdrawal failed: ${errorMessage}`, getMainMenuKeyboard());
+    safeSendMessage(chatId, `❌ Withdrawal failed: ${errorMessage}`, getMainMenuKeyboard(true));
   }
 }
 
-// Deposit monitoring
 async function monitorDeposits(userId: number) {
   const session = userSessions.get(userId);
   if (!session || !session.walletKeypair) return;
@@ -1881,7 +1845,6 @@ async function monitorDeposits(userId: number) {
   }, 15000);
 }
 
-// Enhanced Volume Bot
 async function startVolumeBot(session: UserSession) {
   if (!session.tokenAddress || !session.walletKeypair) {
     safeSendMessage(session.chatId, '❌ Missing requirements for trading', getMainMenuKeyboard(session.hasPaid));
@@ -1891,7 +1854,7 @@ async function startVolumeBot(session: UserSession) {
   try {
     const baseMint = new PublicKey(session.tokenAddress);
     const mainKp = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
-    const distributionNum = session.selectedWalletCount; // Use selected wallet count instead of constant
+    const distributionNum = session.selectedWalletCount;
 
     let poolKeys = null;
     let poolId: PublicKey | undefined;
@@ -1915,7 +1878,6 @@ async function startVolumeBot(session: UserSession) {
       return;
     }
 
-    // Send periodic updates every 3 minutes
     const updateInterval = setInterval(() => {
       const currentSession = userSessions.get(session.userId);
       if (!currentSession?.botRunning) {
@@ -1928,7 +1890,6 @@ async function startVolumeBot(session: UserSession) {
       }
     }, 60000);
 
-    // Start trading for each wallet
     tradingWallets.forEach(async ({ kp }, walletIndex) => {
       await sleep((BUY_INTERVAL_MAX + BUY_INTERVAL_MIN) * walletIndex / 2);
 
@@ -1942,9 +1903,8 @@ async function startVolumeBot(session: UserSession) {
 
           const BUY_INTERVAL = Math.round(Math.random() * (BUY_INTERVAL_MAX - BUY_INTERVAL_MIN) + BUY_INTERVAL_MIN);
           const walletAddress = kp.publicKey.toBase58();
-          const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(-4);
+          const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4);
 
-          // Perform Buy
           const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
           if (!buyResult || !currentSession.botRunning) {
             console.log(`Buy failed or session stopped for user ${session.userId}`);
@@ -1953,7 +1913,6 @@ async function startVolumeBot(session: UserSession) {
 
           await sleep(3000 + Math.random() * 2000);
 
-          // Perform Sell
           const sellResult = await performSell(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
           if (!sellResult || !currentSession.botRunning) {
             console.log(`Sell failed or session stopped for user ${session.userId}`);
@@ -1979,14 +1938,13 @@ async function startVolumeBot(session: UserSession) {
   } catch (error: any) {
     console.error('Volume bot error:', error);
     const errorMessage = error?.message || 'Unknown error occurred';
-    safeSendMessage(session.chatId, `Trading error: ${errorMessage}`, getMainMenuKeyboard());
+    safeSendMessage(session.chatId, `Trading error: ${errorMessage}`, getMainMenuKeyboard(true));
     session.botRunning = false;
     activeTraders.delete(session.userId);
     saveSessions();
   }
 }
 
-// Enhanced SOL distribution (moved outside of startVolumeBot)
 async function distributeSol(mainKp: Keypair, distributionNum: number, session: UserSession): Promise<{ kp: Keypair, address: string, privateKey: string }[]> {
   try {
     const wallets: { kp: Keypair, address: string, privateKey: string }[] = [];
@@ -2047,7 +2005,7 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, session: 
 
       let walletList = '';
       wallets.forEach((wallet, i) => {
-        walletList += `${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(-4)}\n`;
+        walletList += `${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 4)}\n`;
       });
 
       const message =
@@ -2067,12 +2025,11 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, session: 
   } catch (error: any) {
     console.error("Failed to distribute SOL:", error);
     const errorMessage = error?.message || 'Unknown error';
-    safeSendMessage(session.chatId, `❌ Failed to distribute SOL: ${errorMessage}`, getMainMenuKeyboard());
+    safeSendMessage(session.chatId, `❌ Failed to distribute SOL: ${errorMessage}`, getMainMenuKeyboard(true));
     return [];
   }
 }
 
-// Enhanced Buy function
 async function performBuy(
   wallet: Keypair,
   baseMint: PublicKey,
@@ -2082,7 +2039,6 @@ async function performBuy(
   shortWallet: string
 ): Promise<boolean> {
   try {
-    // Check wallet balance first
     const walletBalance = await solanaConnection.getBalance(wallet.publicKey);
     const solBalance = walletBalance / LAMPORTS_PER_SOL;
 
@@ -2147,7 +2103,6 @@ async function performBuy(
       return false;
     }
 
-    // Execute transaction
     const latestBlockhash = await solanaConnection.getLatestBlockhash();
     const txSig = await execute(tx, latestBlockhash);
 
@@ -2200,7 +2155,6 @@ async function performBuy(
   }
 }
 
-// Enhanced Sell function
 async function performSell(
   wallet: Keypair,
   baseMint: PublicKey,
@@ -2291,7 +2245,6 @@ async function performSell(
       return false;
     }
 
-    // Execute sell transaction
     const latestBlockhash = await solanaConnection.getLatestBlockhash();
     const txSig = await execute(sellTx, latestBlockhash, false);
 
@@ -2343,7 +2296,6 @@ async function performSell(
   }
 }
 
-// Graceful shutdown
 process.on('SIGINT', () => {
   console.log('Shutting down bot gracefully...');
 
