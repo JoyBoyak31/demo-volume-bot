@@ -220,77 +220,105 @@ interface JupiterQuoteResponse {
 
 export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: number) => {
   try {
-    const lamports = Math.floor(amount * 10 ** 9)
-    const quoteResponse = await (
-      await fetch(
-        `https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${baseMint.toBase58()}&amount=${lamports}&slippageBps=100`
-      )
-    ).json();
-
-    // get serialized transactions for the swap
-    const response = await (
-      await fetch("https://quote-api.jup.ag/v6/swap", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          quoteResponse,
-          userPublicKey: wallet.publicKey.toString(),
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: 52000
-        }),
+    const lamports = Math.floor(amount * 1e9);
+    
+    // Get Quote using v1 API
+    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${baseMint.toBase58()}&amount=${lamports}&slippageBps=100`;
+    
+    const quoteResponse = await fetch(quoteUrl, {
+      headers: {
+        'accept': 'application/json',
+        'origin': 'https://jup.ag'
+      }
+    }).then(res => res.json());
+    
+    if (quoteResponse.error || !quoteResponse.outAmount) {
+      console.log('Quote failed:', JSON.stringify(quoteResponse));
+      return null;
+    }
+    
+    // Get Swap Transaction
+    const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'accept': 'application/json',
+        'origin': 'https://jup.ag'
+      },
+      body: JSON.stringify({
+        userPublicKey: wallet.publicKey.toString(),
+        wrapAndUnwrapSol: true,
+        quoteResponse: quoteResponse,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 100000
       })
-    ).json() as JupiterQuoteResponse;
-
-    // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(response.swapTransaction, "base64");
-    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-
-    // sign the transaction
+    }).then(res => res.json());
+    
+    if (!swapResponse.swapTransaction) {
+      console.log('No swap transaction returned');
+      return null;
+    }
+    
+    // Deserialize and sign
+    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
+    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
     transaction.sign([wallet]);
-    return transaction
+    
+    return transaction;
   } catch (error) {
-    console.log("Failed to get buy transaction")
-    return null
+    console.log("Failed to get buy transaction:", error);
+    return null;
   }
 };
 
 export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: string) => {
   try {
-    const quoteResponse = await (
-      await fetch(
-        `https://quote-api.jup.ag/v6/quote?inputMint=${baseMint.toBase58()}&outputMint=So11111111111111111111111111111111111111112&amount=${amount}&slippageBps=100`
-      )
-    ).json();
-
-    // get serialized transactions for the swap
-    const response = await (
-      await fetch("https://quote-api.jup.ag/v6/swap", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          quoteResponse,
-          userPublicKey: wallet.publicKey.toString(),
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: 52000
-        }),
+    // Get Quote for selling
+    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${baseMint.toBase58()}&outputMint=So11111111111111111111111111111111111111112&amount=${amount}&slippageBps=100`;
+    
+    const quoteResponse = await fetch(quoteUrl, {
+      headers: {
+        'accept': 'application/json',
+        'origin': 'https://jup.ag'
+      }
+    }).then(res => res.json());
+    
+    if (quoteResponse.error || !quoteResponse.outAmount) {
+      console.log('Sell quote failed:', JSON.stringify(quoteResponse));
+      return null;
+    }
+    
+    // Get Swap Transaction
+    const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'accept': 'application/json',
+        'origin': 'https://jup.ag'
+      },
+      body: JSON.stringify({
+        userPublicKey: wallet.publicKey.toString(),
+        wrapAndUnwrapSol: true,
+        useSharedAccounts: false,
+        quoteResponse: quoteResponse,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 100000
       })
-    ).json() as JupiterQuoteResponse;
-
-    // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(response.swapTransaction, "base64");
-    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-
-    // sign the transaction
+    }).then(res => res.json());
+    
+    if (!swapResponse.swapTransaction) {
+      console.log('No sell swap transaction returned');
+      return null;
+    }
+    
+    // Deserialize and sign
+    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
+    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
     transaction.sign([wallet]);
-    return transaction
+    
+    return transaction;
   } catch (error) {
-    console.log("Failed to get sell transaction")
-    return null
+    console.log("Failed to get sell transaction:", error);
+    return null;
   }
 };

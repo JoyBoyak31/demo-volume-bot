@@ -1,0 +1,217 @@
+{
+  "userId": 7040052003,
+  "chatId": 7040052003,
+  "createdAt": 1758809801603,
+  "lastUpdated": 1759651413576,
+  "mainWallet": {
+    "address": "5eD78sYp5RmCcsG5gBtGN3FBahvvcb12epKX67NZtCm9",
+    "privateKey": "3KuPBJQ71DKXfXJTkXs2ERQCzMwtpDTRchEa3f53vKLSabx3qKxcexHMdoQj9dVVPXpyPi1sMXqDXt3SG9PGF4ps",
+    "instructions": "SAVE THIS PRIVATE KEY SECURELY! You can import this wallet into Phantom, Solflare, or any Solana wallet."
+  },
+  "paymentWallet": {
+    "address": "CuqRyTgKJt9tC1CvKFELgpocAfaH5PWcq4JpN99bhBsr",
+    "privateKey": "62Za3jvoSbkA5KTea3V3arGwgAxxxHju2Te2L4o3zUSejyV4GjP3cjCHm4jLNCvfiFGzwj5nMze3C3r3EsKWM5PJ",
+    "note": "This was your payment wallet. Usually empty after payment processed."
+  },
+  "currentTradingWallets": [
+    {
+      "number": 1,
+      "address": "5HR1zmiWpdALvCJN8iop668u9jb7M31KboUUe1ABkvzb",
+      "privateKey": "5CBdcPaWAAPeR6cRpugpgTh7JxUojFoc1xrUxnj4MVGBz16s9dDNTSZfYJL5DXk2TrrYYwNb5VqmFNyoi1p9x1P5",
+      "status": "ACTIVE",
+      "note": "Currently being used for volume trading"
+    },
+    {
+      "number": 2,
+      "address": "3p7bKMw6BE7YNF8JvdwAqWozp8LhLhKVcQCjaea1Qerj",
+      "privateKey": "4spHTFnpLKpTiV5C86MjAMEfA87t3a7wcxCJD4caCnEuQzXYS5qf9XtbyrbVR5e2fiorwhsxcx6azoGobGRLe8fZ",
+      "status": "ACTIVE",
+      "note": "Currently being used for volume trading"
+    }
+  ],
+  "allTradingWallets": [
+    {
+      "number": 1,
+      "address": "5HR1zmiWpdALvCJN8iop668u9jb7M31KboUUe1ABkvzb",
+      "privateKey": "5CBdcPaWAAPeR6cRpugpgTh7JxUojFoc1xrUxnj4MVGBz16s9dDNTSZfYJL5DXk2TrrYYwNb5VqmFNyoi1p9x1P5",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 2,
+      "address": "3p7bKMw6BE7YNF8JvdwAqWozp8LhLhKVcQCjaea1Qerj",
+      "privateKey": "4spHTFnpLKpTiV5C86MjAMEfA87t3a7wcxCJD4caCnEuQzXYS5qf9XtbyrbVR5e2fiorwhsxcx6azoGobGRLe8fZ",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 3,
+      "address": "6Na5DPm5TPrRriZSTub8YTDupvJMBSf3QRxX1WC7SSSU",
+      "privateKey": "4FHjaG8xyKZwF2Lg59KeSSp2zq1QKD2heNJRYRiDDqrsEMDDPB1tonoCkBBbudCoFiYERcEqy9CafMmZQt397jg4",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 4,
+      "address": "APKqdPFvVwYwvi8mk4RoHCiaLrZUpiagpjGZCUWay8YB",
+      "privateKey": "21NzFZvWDpBWA8N3PvhpxgyM6SuYTPbtViqU8xSdLk65KKsmZjrSVX7biRX2dpExVku5qQJe8Hg7SEAciDi58Pp7",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 5,
+      "address": "7BviKVztBKDrm1aoHj6NvDmreEdHtou7xWZ8WhqB548o",
+      "privateKey": "2Tqhi5yPNKRF6nA8V91BDGxsbC9gG6ZLUHZRNj5ru3hz86hbPzSmEy1ENwJcrezHbp2JQRjjC7SN7keGmNFPfxs",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 6,
+      "address": "6J547jyuwN6kw88xspSz1wbU6MT6BUBBNAZVCW5WBGTg",
+      "privateKey": "HeWyvcj5sko9UseH3BBn57np8sDExg8mxm6tJHBFMz3XTzFnsNTNcoto8URJqfDGtsQByqdTDcowLC8ZU6XtZoc",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 7,
+      "address": "33RLdxRExNnBG8QyK2so47KqVDhQ8uS2xi5e3zEvjUQT",
+      "privateKey": "2MUnvb4UtCTszdP7qCWfjEqhv82SV8vaSFY4h4CeWk49Gkfeunm3qBqGSTzTtAkGfmEDBJAqqfn2b7cvd6AXUerP",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 8,
+      "address": "2kjsCQTm4EKeXTEJFKW9drh91TuSuhhzRAGtfcRSkLyC",
+      "privateKey": "3xvu9zAzpSaTfssFyDYRqbB9hhcLWMxV94ZAmky29RcTiuziCnB5bR3HTtRFkZKmZCjf16yFmqN7zjA1kEmgMAni",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 9,
+      "address": "9XkxZrX6wVvVv81sqt2u3aB5C1pyqwZmBHzeB9B8wCxr",
+      "privateKey": "2N3AZCRRNqaBX4CpZoXz3rqDCktTn5EZVstGV5AbwLJYRaHefemvrw3Y8Asv26LabzVkXup6XNuw7dp4Y6wZDN9p",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 10,
+      "address": "Am1hUT59yLA1HXKUMb4hiVbg2aJFQMDtNYjN8T6xxJqH",
+      "privateKey": "5fJjK2ooEAqHQWFn33wcxnH1VoSTiZCyJXWvhKY6avrKNJhoVgcznKrfmUoELLJT6URWyW52SzHo8x4JViF2jqTy",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 11,
+      "address": "EY2dTAodnzEHwEYqtuKCygMiA3NjCRR5NCpmF6XcJd4D",
+      "privateKey": "3oAonf6x1qPUBpVGLFa2ohe6mgs6oAEnnwJsA6MQh8ixgBTzHfSKuqUW5V8RCVFw3PTz41FpdFaiDbuAg8ZQBwWy",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 12,
+      "address": "BJvdKrcXHkKDkDsjhafTaNFXe3sm28DtrFG5AJE5Tfjt",
+      "privateKey": "5u1Bb3v1rQh23ouzmiWAiASUcaM6g7H3JEpbUEqSLP9szxSRrHdmYjuZsXUYz3XduPb5cDWaentMRLhDxjCTvYAJ",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 13,
+      "address": "FU4s2xdpYsMMZ2sXYvtu1G4nYVginSYvezGWgNHeKWR3",
+      "privateKey": "2U9wj2LfQXyHS8WF4aL7GdLrctDPD83MGR8o3tpY6NrrQ6wQogbVNjYjuK8euwWCUf6incmEHYDyGr4KjsJUn5Xs",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 14,
+      "address": "FcwHpgASCcxuY6FLoUPS1jhrycZSNoPhcvX9v9tkYGNH",
+      "privateKey": "588gViQ2nhoxqx6fjPKJ4jfkAybzNiBqNb2bxnhB6GBhiVkdhmKGsDM3TjTBH9oHuM9HZT2FTze5oBRZ1UMNLBuX",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 15,
+      "address": "4UudoY5fvxofugWKjoVwHai9FrK9M7ZFsgtsdgj9waTT",
+      "privateKey": "2ibHWANxk8np75eHrbgP6wvDyMek7aykCefZ23Zm9V9Znjapb2iZL2y8UdrWQDFFm1mLn237SyqDEz8yoNCwSgxy",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 16,
+      "address": "6dy3K2KixdtGAMHdyu6Qgw14g5hPpcYpeYadW9HHM21y",
+      "privateKey": "5PrQ9Ta4cUZ4aCFoNwNdomn5wS984fwAmKUKV9xkpKtiHWhRBzx4KTWcsEi9BfPvujZ4b9issX5xocj2SsRrv2iw",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 17,
+      "address": "H54BrvC2kMe36DaHCU2oydkmYKuEzKfVUAHtNRtbrVgR",
+      "privateKey": "k9Nnk5LgynddMMvMDuw48UrEGpeaNQQaydray8FJWyBrZkEpTNEg3UhdkUqhtKB9k8WebnUUnxxRsdS74qoUsAV",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 18,
+      "address": "BkufY8bQoWzdGZft4SZr3n5dGpKgs2G57Vw7AGGeE1rt",
+      "privateKey": "4oqXgdE52kkBNRiK8tgbvqPQEihGoipzHMzxqDLZJYe5Bpemb9zVkwm6f2CiFBYhAEs8cknswqs81gD8ZxJvK2ov",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 19,
+      "address": "DuNgXPf8bjo3eTEhduWUKYzz5SgDnaAFp9jpCWQTgDtW",
+      "privateKey": "2y3bK8wEfr6xRL6Jnjf1qYRuUMm8ecfiQBA1chpebfCsUrzvykGis1tFaNPWv5rYcjXshyguttRmPqsd6LfEywza",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 20,
+      "address": "nib2gh26qGDvz3a7fhXmd5NvPKViMLqVRbzyeWk1UQ9",
+      "privateKey": "317vCWu2coGiMZPNcC7XidWJ5zofpzQc5gXUGLZ6cwJrSasUDLJ3isTQw6g3Wq7Ks6WijNvTKMC7h3rkexQCCqwP",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 21,
+      "address": "Bnd4XNmEp1RBL5mbdQ9aASzhuDBPDUH4crfnDzoXuwwM",
+      "privateKey": "3F7hiPHEBfz6VNbQcP3R9xhR19bVyhEnk1bqVCgQ5NqPQM2LWWMGUbuxXDhDhokhoMALRa2VfhZL7trH81j7W4uD",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 22,
+      "address": "BZuCYWVS7iuWnNXCkPo3vaRza2M3LqaVWKvaPgN24UXY",
+      "privateKey": "5hR3ZGHmRNfGVTHW8aerMAiiMBmRXc9MTvxnuRqyB29BfkcDTGYNpCQ6KuMsZ1UAS5hZ97EJi4N2hC9JYBi4PTQ2",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 23,
+      "address": "5bQvwqCv47VsFq3cMf8JjjgCd35Hv6eqXWK8eqdAid7F",
+      "privateKey": "3S8oNi1R3zFu2Hw9yWa2Ws9DPPZazaahk98Td86dtz8HZdam11NoXfW96HYSAHA9XAShuC8et7hiYHVkUGWSgiRw",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 24,
+      "address": "GCotMMhneLQtT6pESD3crD3D9rz5ekss6ZcRCkGQLeHN",
+      "privateKey": "5xp6iLfnXaNyP4zE4yYJG7Nv9X6qLPHBCdg19djp3ow6G71NTSyhmrnrDLAJSz8qiGVuNTKXbANuakSChvtiQLcG",
+      "note": "Import this to recover any remaining SOL"
+    }
+  ],
+  "tradingWalletSummary": {
+    "currentActive": 2,
+    "totalEverCreated": 24,
+    "historicalBatches": 6
+  },
+  "token": {
+    "address": "ncpZnuq241W3wuYcQF9paRz3yASMXN3fLkuVbuaNATH",
+    "name": "Nurse Lives Matter",
+    "symbol": "nurses"
+  },
+  "statistics": {
+    "totalBuys": 2,
+    "totalSells": 1,
+    "totalVolumeSOL": 0.0034460000000000003,
+    "successfulTxs": 3,
+    "failedTxs": 0,
+    "startTime": 1759613096476,
+    "lastActivity": 1759613148746,
+    "lastUpdateSent": 1759651413575
+  },
+  "status": {
+    "botRunning": true,
+    "currentStatus": "trading",
+    "hasPaid": true,
+    "paymentConfirmed": true
+  },
+  "warnings": [
+    "NEVER share your private keys with anyone!",
+    "The bot creator/admin NEVER needs your private keys",
+    "Keep this file secure and backed up",
+    "You can use these keys to recover your wallets in any Solana wallet app",
+    "IMPORTANT: You have 24 total trading wallets created. Check ALL of them for remaining SOL!"
+  ],
+  "recoveryInstructions": {
+    "mainWallet": "Import the mainWallet privateKey into Phantom/Solflare to access your main funds",
+    "tradingWallets": "You have 24 trading wallets. Import each privateKey from 'allTradingWallets' to recover any remaining SOL",
+    "gathering": "Use the 'Withdraw SOL' function in the bot to automatically gather all funds from ALL wallets (current + old), or import each wallet manually",
+    "checkingBalances": "Import each wallet private key into a Solana wallet to check if there's any SOL remaining"
+  }
+}
