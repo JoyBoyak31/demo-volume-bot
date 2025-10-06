@@ -2,30 +2,30 @@
   "7040052003": {
     "userId": 7040052003,
     "chatId": 7040052003,
-    "status": "trading",
+    "status": "stopped",
     "requiredDeposit": 0.1,
     "isMonitoring": true,
-    "botRunning": true,
+    "botRunning": false,
     "tradingWallets": [
       {
-        "address": "5HR1zmiWpdALvCJN8iop668u9jb7M31KboUUe1ABkvzb",
-        "privateKey": "5CBdcPaWAAPeR6cRpugpgTh7JxUojFoc1xrUxnj4MVGBz16s9dDNTSZfYJL5DXk2TrrYYwNb5VqmFNyoi1p9x1P5"
+        "address": "6THD3YQvQXjPQqECNxyx6X4UyvNmTjHYq4JQ4rjfB7XK",
+        "privateKey": "jFdP18JtSrTvCYDbz4xTt5CHMvpSHsi4idGqgb7tKvVkeNBtpgZpPD3o5imo2vP4EUfZnQwN4mc2bDUNHeKKJ8V"
       },
       {
-        "address": "3p7bKMw6BE7YNF8JvdwAqWozp8LhLhKVcQCjaea1Qerj",
-        "privateKey": "4spHTFnpLKpTiV5C86MjAMEfA87t3a7wcxCJD4caCnEuQzXYS5qf9XtbyrbVR5e2fiorwhsxcx6azoGobGRLe8fZ"
+        "address": "BApoDyuDzfFwy9ipyKfpjBXyrbFxPz6Ae9xXNo72pR7u",
+        "privateKey": "2vpkN7CPynym165YYzNXMYj1qo3mZkFrBk1n87fa4iBCsrshJRAQdNjvyauT9sL99cWrcMVnFc82uNWLootRTr6b"
       }
     ],
     "createdAt": 1758809801603,
     "tradingStats": {
       "totalBuys": 2,
-      "totalSells": 1,
-      "totalVolumeSOL": 0.0034460000000000003,
-      "successfulTxs": 3,
+      "totalSells": 0,
+      "totalVolumeSOL": 0.003365,
+      "successfulTxs": 2,
       "failedTxs": 0,
-      "startTime": 1759613096476,
-      "lastActivity": 1759613148746,
-      "lastUpdateSent": 1759651413575
+      "startTime": 1759755222951,
+      "lastActivity": 1759755265994,
+      "lastUpdateSent": 1759755784916
     },
     "walletKeypair": "3KuPBJQ71DKXfXJTkXs2ERQCzMwtpDTRchEa3f53vKLSabx3qKxcexHMdoQj9dVVPXpyPi1sMXqDXt3SG9PGF4ps",
     "depositAddress": "5eD78sYp5RmCcsG5gBtGN3FBahvvcb12epKX67NZtCm9",
@@ -139,6 +139,76 @@
         {
           "address": "GCotMMhneLQtT6pESD3crD3D9rz5ekss6ZcRCkGQLeHN",
           "privateKey": "5xp6iLfnXaNyP4zE4yYJG7Nv9X6qLPHBCdg19djp3ow6G71NTSyhmrnrDLAJSz8qiGVuNTKXbANuakSChvtiQLcG"
+        }
+      ],
+      [
+        {
+          "address": "5HR1zmiWpdALvCJN8iop668u9jb7M31KboUUe1ABkvzb",
+          "privateKey": "5CBdcPaWAAPeR6cRpugpgTh7JxUojFoc1xrUxnj4MVGBz16s9dDNTSZfYJL5DXk2TrrYYwNb5VqmFNyoi1p9x1P5"
+        },
+        {
+          "address": "3p7bKMw6BE7YNF8JvdwAqWozp8LhLhKVcQCjaea1Qerj",
+          "privateKey": "4spHTFnpLKpTiV5C86MjAMEfA87t3a7wcxCJD4caCnEuQzXYS5qf9XtbyrbVR5e2fiorwhsxcx6azoGobGRLe8fZ"
+        }
+      ],
+      [
+        {
+          "address": "4gWoeh6ovty6hbwLyX6ziB7c6D3ZULBD2bSZHFEYaHjt",
+          "privateKey": "655mnkJc2cCdoB4J2thccLpso5NmdUin1Pf7NDJyCBL9fBPuxhdBMLkNNSgNh8Q9SzRsywkkri9eUCPpqsDwL86z"
+        },
+        {
+          "address": "BaXmJ6SZNFg6LjAHtrijDwELuc9NmJVa3bzNNqgMrgy4",
+          "privateKey": "3gtJUnE3h5X3Shjje9xRemuasSzsDLqcTjH8Gc4cc8nRBEn5dvDeixEYZj8ChW8BX7sUsQ8X8v3Ni9gw7qehZ9Yr"
+        }
+      ],
+      [
+        {
+          "address": "GwczWVWtAZQDEKt1qvL84MUmEnqtrhE2YrPN7zQvHr5w",
+          "privateKey": "4KzWdbgxfpTC57rB5HtEA3ZLZNJtrCAuejsZYi39CmwWjyjgvHwZJMpLz5j74FfLs7Q4eDBjyXEsjzC3YoCeGNXj"
+        },
+        {
+          "address": "7pzakSxappwMdD1CC3xaybQGbxeE9HrbTbddFSZVkHsL",
+          "privateKey": "2Rgg2LmyX4QHVS4TJtSvJhJinBBNpRBeZzSp87pDMvLRW1u6DTFTxc6mhUrFatRprmPho85wtfcie2Wr7XWyUZee"
+        }
+      ],
+      [
+        {
+          "address": "9V7kep3er9WpWijFgfHCpemsajXim8B3ZJhcKacMncme",
+          "privateKey": "5wW3Z4cSfRKSWgHc1nTsePQNAFpmubzk9fPgU8AurW5bmvKcjSXodAVRsNiZWiDLh43qdbXNVR37wRYgKKxsNoy2"
+        },
+        {
+          "address": "Dc9HyKPZ2H4TCwQjCppENTGLBuCSfVV4vqX6kt8K6UeV",
+          "privateKey": "2drxKqczuvdmeZTc1aR4r76apTuR9JUyfhczxrNN55KdoYJDNd1MmrP9WM7PmKBeZJXscvz8rgjtbEqFiLRoTu6q"
+        }
+      ],
+      [
+        {
+          "address": "8S4sJGPn39ARMvsxXF6iyBv9vdLxLxa2mWn7JvzRgm8L",
+          "privateKey": "4uZskwvu2u6NFBjZTD7q1dWQ7AbGQngQ3HjtUcRh3oim1EMKDqEXBuveRuRG1BKjBMs8Zqu8Z8sbvPjbH2W5dFCU"
+        },
+        {
+          "address": "HE1kcHrrRFFea9xnmKmsbsivLPKMbzN6YgBTLq7U2USa",
+          "privateKey": "4sy24aHJ3ZYG6385VDfEFgcC5AB6NzmncvynKDmfQePsGVUT7NuexkRra39Sz3SR8RWcpesrVfUELzhrA1s7vW1t"
+        }
+      ],
+      [
+        {
+          "address": "4r9WfkXg8scGFcPo7mvwTCuFrLCGQN1Rpjcenv9Nxp18",
+          "privateKey": "59XWSd1Mc9bCMvmnRbwLUKFSMPweWF7duxxXTgMQ8qL3wVuhdJyPNeDPXdyNoz6jxRvh559kr1iTK3sWTuaNBW4A"
+        },
+        {
+          "address": "9dLrAAvamFewWBrEETgBHz4xPdnM2Ymvk1havcvJMcBT",
+          "privateKey": "2EMqRW5r7DPTkADTPXz94ctt9cwQdYuoshkdptWL1wLwRfMNikBzyV4jatt3qezVqDoGdK8idegsw1iLcUiUUx2V"
+        }
+      ],
+      [
+        {
+          "address": "4F7dM4bsJRYZZSzoHqJTGUgTZnV3b7iZc6vJcBpgDNRv",
+          "privateKey": "59tnBB1gjovyg6F795hbURJgsio7butTfbyQASH8SX97VErAQ65g9NYeatmP2GBveqEfeyLFJKT6R2vBAhbXGMa8"
+        },
+        {
+          "address": "DfvxP6a9ygpjp7rY4p5HCCAqEQBE4hY3JtZeEyFZgUHd",
+          "privateKey": "3RXNb3inVqCsTDvc5VAtS3yEEt7f8JPo4Mr8Xkr5JspCae1fCxTJdPTvy4DPxk1hNc2wtaK141Bqs4CaAXEKvn1D"
         }
       ]
     ],

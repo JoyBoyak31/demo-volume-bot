@@ -1472,6 +1472,44 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
 
       saveAfterCriticalOperation(session);
 
+      // CRITICAL: Wait for balances to be confirmed on-chain
+      console.log("Waiting for distribution to be confirmed on-chain...");
+      await sleep(5000); // Wait 5 seconds for blockchain confirmation
+
+      // Verify each wallet received the funds
+      let allWalletsVerified = true;
+      for (let i = 0; i < wallets.length; i++) {
+        const wallet = wallets[i];
+        let attempts = 0;
+        let verified = false;
+
+        while (attempts < 10 && !verified) {
+          try {
+            const balance = await solanaConnection.getBalance(new PublicKey(wallet.address));
+            const solBalance = balance / LAMPORTS_PER_SOL;
+
+            if (solBalance >= amountPerWallet * 0.95) { // Allow 5% margin for fees
+              console.log(`Wallet ${i + 1} verified: ${solBalance.toFixed(6)} SOL`);
+              verified = true;
+              break;
+            }
+
+            console.log(`Wallet ${i + 1} balance not ready yet: ${solBalance.toFixed(6)} SOL, waiting...`);
+            await sleep(2000);
+            attempts++;
+          } catch (error) {
+            console.log(`Error checking wallet ${i + 1} balance, attempt ${attempts + 1}/10`);
+            await sleep(2000);
+            attempts++;
+          }
+        }
+
+        if (!verified) {
+          console.log(`Warning: Wallet ${i + 1} balance could not be verified after 10 attempts`);
+          allWalletsVerified = false;
+        }
+      }
+
       let walletList = '';
       wallets.forEach((wallet, i) => {
         walletList += `${i + 1}. ${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 4)}\n`;
@@ -1483,6 +1521,7 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
         `Amount per wallet: ${amountPerWallet.toFixed(4)} SOL\n` +
         `Total distributed: ${(amountPerWallet * distributionNum).toFixed(4)} SOL\n` +
         `Transaction: https://solscan.io/tx/${txSig}\n\n` +
+        `${allWalletsVerified ? '✅ All wallets verified!' : '⚠️ Some wallets still confirming...'}\n` +
         `Starting volume generation...\n` +
         `Live trading alerts incoming!`;
 
@@ -1561,7 +1600,37 @@ async function startVolumeBot(session: UserSession, amountPerWallet: number) {
           const walletAddress = kp.publicKey.toBase58();
           const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4);
 
-          const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
+          // Pre-check wallet balance before attempting buy
+          let walletBalance = 0;
+          let balanceCheckAttempts = 0;
+
+          while (balanceCheckAttempts < 5) {
+            try {
+              const balance = await solanaConnection.getBalance(kp.publicKey);
+              walletBalance = balance / LAMPORTS_PER_SOL;
+
+              if (walletBalance > 0) {
+                console.log(`Wallet ${walletIndex + 1} balance confirmed: ${walletBalance.toFixed(6)} SOL`);
+                break;
+              }
+
+              console.log(`Wallet ${walletIndex + 1} balance still 0, waiting... (${balanceCheckAttempts + 1}/5)`);
+              await sleep(3000);
+              balanceCheckAttempts++;
+            } catch (error) {
+              console.log(`Error checking wallet ${walletIndex + 1} balance`);
+              await sleep(3000);
+              balanceCheckAttempts++;
+            }
+          }
+
+          if (walletBalance === 0) {
+            console.log(`Wallet ${walletIndex + 1} has no balance after 5 checks, skipping this cycle`);
+            await sleep(10000); // Wait longer before trying again
+            continue;
+          }
+
+          const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);                                                                   
           if (!buyResult || !currentSession.botRunning) {
             console.log(`Buy failed or session stopped for user ${session.userId}`);
             break;
@@ -1601,6 +1670,104 @@ async function startVolumeBot(session: UserSession, amountPerWallet: number) {
   }
 }
 
+async function refuelWalletFromMain(
+  mainKp: Keypair,
+  targetWallet: Keypair,
+  session: UserSession,
+  walletNumber: number,
+  shortWallet: string
+): Promise<boolean> {
+  try {
+    const mainBalance = await solanaConnection.getBalance(mainKp.publicKey);
+    const mainSolBalance = mainBalance / LAMPORTS_PER_SOL;
+
+    // Amount needed for swap fees (enough for several swaps)
+    const refuelAmount = ADDITIONAL_FEE * 3; // 3x the additional fee for safety
+
+    if (mainSolBalance < refuelAmount + 0.001) {
+      console.log(`Main wallet has insufficient balance to refuel. Main: ${mainSolBalance.toFixed(6)} SOL`);
+
+      safeSendMessage(session.chatId,
+        `⚠️ REFUEL FAILED\n\n` +
+        `Main wallet has insufficient SOL\n` +
+        `Main Balance: ${mainSolBalance.toFixed(6)} SOL\n` +
+        `Needed: ${refuelAmount.toFixed(6)} SOL\n\n` +
+        `Please deposit more SOL to main wallet:\n` +
+        `\`${mainKp.publicKey.toBase58()}\`\n\n` +
+        `Trading will pause until refueled.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Check Balance', callback_data: 'check_balance' }],
+              [{ text: 'Stop Volume', callback_data: 'stop_volume' }]
+            ]
+          }
+        }
+      );
+      return false;
+    }
+
+    console.log(`Refueling wallet ${walletNumber} with ${refuelAmount.toFixed(6)} SOL`);
+
+    const transaction = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
+      SystemProgram.transfer({
+        fromPubkey: mainKp.publicKey,
+        toPubkey: targetWallet.publicKey,
+        lamports: Math.floor(refuelAmount * LAMPORTS_PER_SOL)
+      })
+    );
+
+    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    transaction.recentBlockhash = latestBlockhash.blockhash;
+    transaction.feePayer = mainKp.publicKey;
+
+    const messageV0 = new TransactionMessage({
+      payerKey: mainKp.publicKey,
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions: transaction.instructions,
+    }).compileToV0Message();
+
+    const versionedTx = new VersionedTransaction(messageV0);
+    versionedTx.sign([mainKp]);
+
+    const sig = await execute(versionedTx, latestBlockhash);
+
+    if (sig) {
+      console.log(`Successfully refueled wallet ${walletNumber}: ${sig}`);
+
+      safeSendMessage(session.chatId,
+        `⛽ WALLET REFUELED\n\n` +
+        `Wallet: ${shortWallet}\n` +
+        `Amount: +${refuelAmount.toFixed(6)} SOL\n` +
+        `TX: https://solscan.io/tx/${sig}\n\n` +
+        `Trading continues...`,
+        { disable_web_page_preview: true }
+      );
+
+      // Wait a moment for the transaction to be confirmed
+      await sleep(2000);
+      return true;
+    }
+
+    return false;
+
+  } catch (error: any) {
+    console.error(`Refuel error for wallet ${walletNumber}:`, error);
+
+    safeSendMessage(session.chatId,
+      `⚠️ REFUEL ERROR\n\n` +
+      `Wallet: ${shortWallet}\n` +
+      `Error: ${error?.message || 'Unknown error'}\n\n` +
+      `Trading may be affected.`
+    );
+
+    return false;
+  }
+}
+
 async function performBuy(
   wallet: Keypair,
   baseMint: PublicKey,
@@ -1618,8 +1785,28 @@ async function performBuy(
       : BUY_AMOUNT;
 
     const minimumRequired = buyAmount + ADDITIONAL_FEE;
+
+    // Check if insufficient SOL for buying
     if (solBalance < minimumRequired) {
-      console.log(`Wallet ${walletNumber} insufficient balance: ${solBalance} SOL, needs ${minimumRequired} SOL`);
+      console.log(`Wallet ${walletNumber} insufficient balance: ${solBalance.toFixed(6)} SOL, needs ${minimumRequired.toFixed(6)} SOL`);
+
+      safeSendMessage(session.chatId,
+        `⚠️ INSUFFICIENT SOL FOR TRADING\n\n` +
+        `Wallet ${walletNumber} (${shortWallet})\n` +
+        `Current: ${solBalance.toFixed(6)} SOL\n` +
+        `Needed: ${minimumRequired.toFixed(6)} SOL\n\n` +
+        `This wallet has run out of SOL for trading.\n` +
+        `Consider stopping and withdrawing remaining funds.`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Stop Volume', callback_data: 'stop_volume' }],
+              [{ text: 'Withdraw All', callback_data: 'withdraw_sol' }]
+            ]
+          }
+        }
+      );
+
       return false;
     }
 
@@ -1735,7 +1922,43 @@ async function performSell(
   shortWallet: string
 ): Promise<boolean> {
   try {
-    // Find actual token account that holds this token (not just ATA)
+    // Check SOL balance before attempting sell
+    const walletBalance = await solanaConnection.getBalance(wallet.publicKey);
+    const solBalance = walletBalance / LAMPORTS_PER_SOL;
+
+    // Need at least ADDITIONAL_FEE for swap fees
+    if (solBalance < ADDITIONAL_FEE) {
+      console.log(`Wallet ${walletNumber} needs refuel for swap. Balance: ${solBalance.toFixed(6)} SOL`);
+
+      // Get main wallet keypair
+      if (!session.walletKeypair) {
+        console.log(`Cannot refuel - main wallet not found`);
+        return false;
+      }
+
+      const mainKp = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
+
+      // Auto-refuel from main wallet
+      const refueled = await refuelWalletFromMain(mainKp, wallet, session, walletNumber, shortWallet);
+
+      if (!refueled) {
+        console.log(`Failed to refuel wallet ${walletNumber}`);
+        return false;
+      }
+
+      // Recheck balance after refuel
+      const newBalance = await solanaConnection.getBalance(wallet.publicKey);
+      const newSolBalance = newBalance / LAMPORTS_PER_SOL;
+
+      if (newSolBalance < ADDITIONAL_FEE) {
+        console.log(`Refuel completed but still insufficient: ${newSolBalance.toFixed(6)} SOL`);
+        return false;
+      }
+
+      console.log(`Wallet ${walletNumber} refueled successfully. New balance: ${newSolBalance.toFixed(6)} SOL`);
+    }
+
+    // Find actual token account that holds this token
     const accounts = await solanaConnection.getTokenAccountsByOwner(wallet.publicKey, { mint: baseMint });
 
     if (accounts.value.length === 0) {
@@ -2435,13 +2658,13 @@ if (BOT_TOKEN) {
     if (session.status === 'awaiting_withdraw_address') {
       try {
         new PublicKey(trimmedText);
-        
+
         session.status = 'idle';
         userSessions.set(userId, session);
         saveSessions();
-        
+
         safeSendMessage(chatId, 'Processing withdrawal...\nThis may take a few minutes.');
-        
+
         await performWithdrawal(session, trimmedText, chatId);
       } catch (error) {
         safeSendMessage(chatId, 'Invalid Solana address. Please try again or cancel.', {
@@ -2643,43 +2866,49 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
 
     const mainKp = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
 
-    const allTradingWallets: TradingWallet[] = [];
+    // Track results
+    let totalGathered = 0;
+    let successfulGathers = 0;
+    let failedWallets: { address: string; reason: string; balance: number }[] = [];
+    let walletsWithFunds: { address: string; balance: number }[] = [];
 
+    // PRIORITY 1: Gather from CURRENT trading wallets first
     if (session.tradingWallets && session.tradingWallets.length > 0) {
-      allTradingWallets.push(...session.tradingWallets);
-    }
+      safeSendMessage(chatId, `Gathering from ${session.tradingWallets.length} active trading wallets...`);
 
-    if (session.tradingWalletsHistory && session.tradingWalletsHistory.length > 0) {
-      session.tradingWalletsHistory.forEach(batch => {
-        allTradingWallets.push(...batch);
-      });
-    }
-
-    const uniqueWallets = Array.from(
-      new Map(allTradingWallets.map(w => [w.address, w])).values()
-    );
-
-    if (uniqueWallets.length > 0) {
-      safeSendMessage(chatId, `Gathering SOL from ${uniqueWallets.length} total trading wallets...`);
-
-      let totalGathered = 0;
-      let successfulGathers = 0;
-
-      for (let i = 0; i < uniqueWallets.length; i++) {
+      for (let i = 0; i < session.tradingWallets.length; i++) {
         try {
-          const wallet = Keypair.fromSecretKey(base58.decode(uniqueWallets[i].privateKey));
+          const wallet = Keypair.fromSecretKey(base58.decode(session.tradingWallets[i].privateKey));
           const balance = await solanaConnection.getBalance(wallet.publicKey);
+          const solBalance = balance / LAMPORTS_PER_SOL;
 
-          if (balance === 0) continue;
+          if (balance === 0) {
+            console.log(`Active wallet ${i + 1} has 0 balance, skipping`);
+            continue;
+          }
 
+          walletsWithFunds.push({
+            address: wallet.publicKey.toBase58(),
+            balance: solBalance
+          });
+
+          // Calculate how much we can safely withdraw
           const rent = await solanaConnection.getMinimumBalanceForRentExemption(0);
-          const feeBuffer = 15000;
-          const transferAmount = balance - rent - feeBuffer;
+          const txFee = 20000; // Conservative fee estimate
+          const transferAmount = balance - rent - txFee;
 
-          if (transferAmount <= 5000) continue;
+          if (transferAmount <= 0) {
+            console.log(`Active wallet ${i + 1} has insufficient funds after rent: ${solBalance.toFixed(6)} SOL`);
+            failedWallets.push({
+              address: wallet.publicKey.toBase58(),
+              reason: 'Insufficient after rent',
+              balance: solBalance
+            });
+            continue;
+          }
 
           const transaction = new Transaction().add(
-            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500_000 }),
+            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200_000 }),
             ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
             SystemProgram.transfer({
               fromPubkey: wallet.publicKey,
@@ -2704,26 +2933,179 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
           const sig = await execute(versionedTx, latestBlockhash);
 
           if (sig) {
-            totalGathered += transferAmount / LAMPORTS_PER_SOL;
+            const gatheredAmount = transferAmount / LAMPORTS_PER_SOL;
+            totalGathered += gatheredAmount;
             successfulGathers++;
+            console.log(`Gathered ${gatheredAmount.toFixed(6)} SOL from active wallet ${i + 1}`);
+          } else {
+            failedWallets.push({
+              address: wallet.publicKey.toBase58(),
+              reason: 'Transaction failed',
+              balance: solBalance
+            });
           }
 
-          await sleep(1500);
+          await sleep(1500); // Rate limiting
+
         } catch (error: any) {
-          console.error(`Failed to gather from wallet ${i + 1}:`, error);
+          const errorMsg = error?.message || 'Unknown error';
+          console.error(`Failed to gather from active wallet ${i + 1}:`, errorMsg);
+
+          try {
+            const balance = await solanaConnection.getBalance(
+              Keypair.fromSecretKey(base58.decode(session.tradingWallets[i].privateKey)).publicKey
+            );
+            failedWallets.push({
+              address: session.tradingWallets[i].address,
+              reason: errorMsg,
+              balance: balance / LAMPORTS_PER_SOL
+            });
+          } catch { }
+
           continue;
         }
       }
 
       if (successfulGathers > 0) {
-        safeSendMessage(chatId, `Gathered ${totalGathered.toFixed(6)} SOL from ${successfulGathers} wallets!`);
-        await sleep(5000);
+        safeSendMessage(chatId,
+          `✅ Gathered ${totalGathered.toFixed(6)} SOL from ${successfulGathers}/${session.tradingWallets.length} active wallets!`
+        );
+        await sleep(3000);
       }
     }
 
+    // PRIORITY 2: Gather from historical wallets (if any)
+    let historicalWallets: TradingWallet[] = [];
+    if (session.tradingWalletsHistory && session.tradingWalletsHistory.length > 0) {
+      session.tradingWalletsHistory.forEach(batch => {
+        historicalWallets.push(...batch);
+      });
+
+      // Remove duplicates and current wallets
+      const currentAddresses = new Set(session.tradingWallets.map(w => w.address));
+      historicalWallets = Array.from(
+        new Map(historicalWallets.map(w => [w.address, w])).values()
+      ).filter(w => !currentAddresses.has(w.address));
+
+      if (historicalWallets.length > 0) {
+        safeSendMessage(chatId, `Checking ${historicalWallets.length} historical wallets...`);
+
+        let historicalGathered = 0;
+        let historicalSuccess = 0;
+
+        for (let i = 0; i < historicalWallets.length; i++) {
+          try {
+            const wallet = Keypair.fromSecretKey(base58.decode(historicalWallets[i].privateKey));
+            const balance = await solanaConnection.getBalance(wallet.publicKey);
+            const solBalance = balance / LAMPORTS_PER_SOL;
+
+            if (balance === 0) continue;
+
+            walletsWithFunds.push({
+              address: wallet.publicKey.toBase58(),
+              balance: solBalance
+            });
+
+            const rent = await solanaConnection.getMinimumBalanceForRentExemption(0);
+            const txFee = 20000;
+            const transferAmount = balance - rent - txFee;
+
+            if (transferAmount <= 0) {
+              failedWallets.push({
+                address: wallet.publicKey.toBase58(),
+                reason: 'Insufficient after rent',
+                balance: solBalance
+              });
+              continue;
+            }
+
+            const transaction = new Transaction().add(
+              ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200_000 }),
+              ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
+              SystemProgram.transfer({
+                fromPubkey: wallet.publicKey,
+                toPubkey: mainKp.publicKey,
+                lamports: transferAmount
+              })
+            );
+
+            const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
+            transaction.recentBlockhash = latestBlockhash.blockhash;
+            transaction.feePayer = wallet.publicKey;
+
+            const messageV0 = new TransactionMessage({
+              payerKey: wallet.publicKey,
+              recentBlockhash: latestBlockhash.blockhash,
+              instructions: transaction.instructions,
+            }).compileToV0Message();
+
+            const versionedTx = new VersionedTransaction(messageV0);
+            versionedTx.sign([wallet]);
+
+            const sig = await execute(versionedTx, latestBlockhash);
+
+            if (sig) {
+              const gatheredAmount = transferAmount / LAMPORTS_PER_SOL;
+              historicalGathered += gatheredAmount;
+              historicalSuccess++;
+            } else {
+              failedWallets.push({
+                address: wallet.publicKey.toBase58(),
+                reason: 'Transaction failed',
+                balance: solBalance
+              });
+            }
+
+            await sleep(1500);
+
+          } catch (error: any) {
+            const errorMsg = error?.message || 'Unknown error';
+            try {
+              const balance = await solanaConnection.getBalance(
+                Keypair.fromSecretKey(base58.decode(historicalWallets[i].privateKey)).publicKey
+              );
+              failedWallets.push({
+                address: historicalWallets[i].address,
+                reason: errorMsg,
+                balance: balance / LAMPORTS_PER_SOL
+              });
+            } catch { }
+            continue;
+          }
+        }
+
+        if (historicalSuccess > 0) {
+          totalGathered += historicalGathered;
+          successfulGathers += historicalSuccess;
+          safeSendMessage(chatId,
+            `✅ Gathered ${historicalGathered.toFixed(6)} SOL from ${historicalSuccess} historical wallets!`
+          );
+          await sleep(3000);
+        }
+      }
+    }
+
+    // Now withdraw from main wallet
     const finalBalance = await solanaConnection.getBalance(mainKp.publicKey);
     if (finalBalance === 0) {
-      safeSendMessage(chatId, 'No SOL balance to withdraw.', getMainMenuKeyboard(true));
+      let statusMsg = `No SOL to withdraw from main wallet.\n\n`;
+
+      if (walletsWithFunds.length === 0 && failedWallets.length === 0) {
+        statusMsg += `All wallets are empty.`;
+      } else if (failedWallets.length > 0) {
+        statusMsg += `⚠️ ${failedWallets.length} wallets have SOL but couldn't be gathered:\n\n`;
+        failedWallets.slice(0, 5).forEach(w => {
+          statusMsg += `${w.address.substring(0, 8)}...${w.address.substring(w.address.length - 4)}\n`;
+          statusMsg += `Balance: ${w.balance.toFixed(6)} SOL\n`;
+          statusMsg += `Reason: ${w.reason}\n\n`;
+        });
+        if (failedWallets.length > 5) {
+          statusMsg += `...and ${failedWallets.length - 5} more\n\n`;
+        }
+        statusMsg += `Use "Export Session" to get private keys and manually withdraw.`;
+      }
+
+      safeSendMessage(chatId, statusMsg, getMainMenuKeyboard(true));
       return;
     }
 
@@ -2733,7 +3115,13 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
     const withdrawableAmount = finalBalance - rentExemption - txFee;
 
     if (withdrawableAmount <= 5000) {
-      safeSendMessage(chatId, `Insufficient balance for withdrawal.\n\nCurrent: ${solBalance.toFixed(6)} SOL`, getMainMenuKeyboard(true));
+      safeSendMessage(chatId,
+        `Insufficient balance in main wallet.\n\n` +
+        `Main Balance: ${solBalance.toFixed(6)} SOL\n` +
+        `After fees: Too low to withdraw\n\n` +
+        `Total gathered from trading wallets: ${totalGathered.toFixed(6)} SOL`,
+        getMainMenuKeyboard(true)
+      );
       return;
     }
 
@@ -2776,23 +3164,39 @@ async function performWithdrawal(session: UserSession, withdrawAddress: string, 
       userSessions.set(session.userId, session);
       saveAfterCriticalOperation(session);
 
-      safeSendMessage(chatId,
-        `Withdrawal Successful!\n\n` +
-        `Amount: ${withdrawableSol.toFixed(6)} SOL\n` +
-        `To: ${withdrawAddress}\n` +
-        `TX: https://solscan.io/tx/${txSig}\n\n` +
-        `Main wallet still exists for future use!\n` +
-        `Trading wallet keys preserved in history.\n` +
-        `Use "Export Session" to see all wallet keys.`,
-        getMainMenuKeyboard(true)
-      );
+      let successMsg =
+        `✅ Withdrawal Successful!\n\n` +
+        `Total Gathered: ${totalGathered.toFixed(6)} SOL (${successfulGathers} wallets)\n` +
+        `Main Wallet: ${withdrawableSol.toFixed(6)} SOL\n` +
+        `Grand Total: ${(totalGathered + withdrawableSol).toFixed(6)} SOL\n` +
+        `To: ${withdrawAddress.substring(0, 8)}...${withdrawAddress.substring(withdrawAddress.length - 4)}\n` +
+        `TX: https://solscan.io/tx/${txSig}\n\n`;
+
+      if (failedWallets.length > 0) {
+        successMsg +=
+          `\n⚠️ ${failedWallets.length} wallets couldn't be gathered:\n\n`;
+        failedWallets.slice(0, 3).forEach(w => {
+          successMsg += `${w.address.substring(0, 6)}...${w.address.substring(w.address.length - 4)}: `;
+          successMsg += `${w.balance.toFixed(6)} SOL (${w.reason})\n`;
+        });
+        if (failedWallets.length > 3) {
+          successMsg += `...and ${failedWallets.length - 3} more\n`;
+        }
+        successMsg += `\nUse "Export Session" to manually recover these.`;
+      }
+
+      safeSendMessage(chatId, successMsg, getMainMenuKeyboard(true));
     } else {
-      throw new Error('Transaction failed');
+      throw new Error('Withdrawal transaction failed');
     }
 
   } catch (error: any) {
     console.error('Withdrawal error:', error);
-    safeSendMessage(chatId, `Withdrawal failed: ${error?.message || 'Unknown error'}`, getMainMenuKeyboard(true));
+    safeSendMessage(chatId,
+      `Withdrawal failed: ${error?.message || 'Unknown error'}\n\n` +
+      `Try again or use "Export Session" to manually withdraw.`,
+      getMainMenuKeyboard(true)
+    );
   }
 }
 
