@@ -248,5 +248,65 @@
     "tokenName": "Ugly Dog",
     "tokenSymbol": "$UGLYDOG",
     "awaitingWithdrawalAddress": false
+  },
+  "6032854482": {
+    "userId": 6032854482,
+    "chatId": 6032854482,
+    "status": "idle",
+    "requiredDeposit": 0.02,
+    "isMonitoring": false,
+    "botRunning": false,
+    "tradingWallets": [],
+    "tradingWalletsHistory": [],
+    "createdAt": 1759764621748,
+    "tradingStats": {
+      "totalBuys": 0,
+      "totalSells": 0,
+      "totalVolumeSOL": 0,
+      "successfulTxs": 0,
+      "failedTxs": 0,
+      "startTime": 0,
+      "lastActivity": 0,
+      "lastUpdateSent": 0
+    },
+    "hasPaid": false,
+    "paymentWallet": "CFEo6fauKAFYrtKpuDvXCTHicaeBzFk7mw3jmGfaFWdj",
+    "paymentWalletPrivateKey": "4iU5tykCy9CcKZQ3LZ4aidF8rWQFvgs3eyiz8AVmK28xCGx9yYzqti5WvpjMrKm7P3AEFX8pZ8yMw4zn5QXbCj4y",
+    "paymentAmount": 0.00001,
+    "paymentConfirmed": false,
+    "selectedWalletCount": 2,
+    "distributionConfig": {
+      "mode": "auto"
+    }
+  },
+  "6329617050": {
+    "userId": 6329617050,
+    "chatId": 6329617050,
+    "status": "idle",
+    "requiredDeposit": 0.02,
+    "isMonitoring": false,
+    "botRunning": false,
+    "tradingWallets": [],
+    "tradingWalletsHistory": [],
+    "createdAt": 1759764919711,
+    "tradingStats": {
+      "totalBuys": 0,
+      "totalSells": 0,
+      "totalVolumeSOL": 0,
+      "successfulTxs": 0,
+      "failedTxs": 0,
+      "startTime": 0,
+      "lastActivity": 0,
+      "lastUpdateSent": 0
+    },
+    "hasPaid": false,
+    "paymentWallet": "GCwgAUi1tLFK2nbHoKwwrCFRPwSAt7y4WBAQPXmdjma7",
+    "paymentWalletPrivateKey": "5dvjTzMwqAkJpyrKXJjvijx3fch3HksGt9WiYb8oH2QdTcGktU3mwm29ntuyfTT1UurRNYJ5BsxmgHSA125J1dWF",
+    "paymentAmount": 0.001,
+    "paymentConfirmed": false,
+    "selectedWalletCount": 2,
+    "distributionConfig": {
+      "mode": "auto"
+    }
   }
 }

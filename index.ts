@@ -28,6 +28,7 @@ import {
   RPC_ENDPOINT,
   RPC_WEBSOCKET_ENDPOINT,
   SWAP_ROUTING,
+  ADMIN_PAYMENT_WALLET,
 } from './constants'
 import { Data, editJson, readJson, saveDataToFile, sleep } from './utils'
 import base58 from 'bs58'
@@ -40,7 +41,7 @@ import * as path from 'path'
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 let bot: TelegramBot | null = null;
 
-const PAYMENT_AMOUNT = 0.00001;
+const PAYMENT_AMOUNT = 0.001;
 
 export const solanaConnection = new Connection(RPC_ENDPOINT, {
   wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
@@ -484,6 +485,18 @@ async function monitorPayment(userId: number) {
           `Use the menu below to get started:`;
 
         safeSendMessage(currentSession.chatId, message, getMainMenuKeyboard(true));
+        
+        // Auto-transfer payment to admin wallet
+        console.log(`Transferring payment to admin for user ${userId}`);
+        await sleep(3000); // Wait for confirmation
+        const transferred = await transferPaymentToAdmin(currentSession);
+        
+        if (transferred) {
+          console.log(`Payment successfully transferred to admin from user ${userId}`);
+        } else {
+          console.log(`Payment transfer to admin failed for user ${userId} - manual collection needed`);
+        }
+        
         clearInterval(checkPayment);
       }
 
@@ -493,6 +506,71 @@ async function monitorPayment(userId: number) {
       console.error('Payment monitoring error:', error);
     }
   }, 15000);
+}
+
+async function transferPaymentToAdmin(session: UserSession): Promise<boolean> {
+  if (!session.paymentWalletPrivateKey || !ADMIN_PAYMENT_WALLET) {
+    console.log('Missing payment wallet or admin wallet configuration');
+    return false;
+  }
+
+  try {
+    const paymentKeypair = Keypair.fromSecretKey(base58.decode(session.paymentWalletPrivateKey));
+    const adminKeypair = Keypair.fromSecretKey(base58.decode(ADMIN_PAYMENT_WALLET));
+    
+    const balance = await solanaConnection.getBalance(paymentKeypair.publicKey);
+    
+    if (balance === 0) {
+      console.log('Payment wallet is empty, nothing to transfer');
+      return false;
+    }
+
+    // Keep minimum for rent, transfer rest to admin
+    const rent = await solanaConnection.getMinimumBalanceForRentExemption(0);
+    const txFee = 10000;
+    const transferAmount = balance - rent - txFee;
+
+    if (transferAmount <= 0) {
+      console.log('Insufficient balance after fees');
+      return false;
+    }
+
+    const transaction = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 40_000 }),
+      SystemProgram.transfer({
+        fromPubkey: paymentKeypair.publicKey,
+        toPubkey: adminKeypair.publicKey,
+        lamports: transferAmount
+      })
+    );
+
+    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    transaction.recentBlockhash = latestBlockhash.blockhash;
+    transaction.feePayer = paymentKeypair.publicKey;
+
+    const messageV0 = new TransactionMessage({
+      payerKey: paymentKeypair.publicKey,
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions: transaction.instructions,
+    }).compileToV0Message();
+
+    const versionedTx = new VersionedTransaction(messageV0);
+    versionedTx.sign([paymentKeypair]);
+
+    const sig = await execute(versionedTx, latestBlockhash);
+
+    if (sig) {
+      console.log(`Payment transferred to admin: ${(transferAmount / LAMPORTS_PER_SOL).toFixed(6)} SOL, TX: ${sig}`);
+      return true;
+    }
+
+    return false;
+
+  } catch (error: any) {
+    console.error('Payment transfer error:', error);
+    return false;
+  }
 }
 
 async function fetchTokenInfo(tokenAddress: string): Promise<{ name: string, symbol: string }> {
@@ -546,7 +624,7 @@ function getMainMenuKeyboard(isPaid: boolean = false) {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: 'Make Payment (0.5 SOL)', callback_data: 'make_payment' }
+            { text: 'Make Payment (0.001 SOL)', callback_data: 'make_payment' }
           ],
           [
             { text: 'Why Payment Required?', callback_data: 'payment_info' },

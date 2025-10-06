@@ -1,6 +1,7 @@
 import { logger, retrieveEnvVariable } from "../utils"
 
 export const PRIVATE_KEY = retrieveEnvVariable('PRIVATE_KEY', logger)
+export const ADMIN_PAYMENT_WALLET = process.env.ADMIN_PAYMENT_WALLET || ''
 export const RPC_ENDPOINT = retrieveEnvVariable('RPC_ENDPOINT', logger)
 export const RPC_WEBSOCKET_ENDPOINT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT', logger)
 
