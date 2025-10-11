@@ -343,14 +343,14 @@ function getUserSession(userId: number, chatId: number): UserSession {
         lastActivity: 0,
         lastUpdateSent: 0
       },
-      hasPaid: false,
+      hasPaid: true,  // CHANGED: Set to true for free access
       paymentWallet: paymentWallet.publicKey.toBase58(),
       paymentWalletPrivateKey: base58.encode(paymentWallet.secretKey),
       paymentAmount: PAYMENT_AMOUNT,
-      paymentConfirmed: false,
-      selectedWalletCount: 2,
+      paymentConfirmed: true,  // CHANGED: Set to true for free access
+      selectedWalletCount: 1,
       distributionConfig: {
-        mode: 'auto' // Default to auto-distribute all
+        mode: 'auto'
       }
     };
 
@@ -485,18 +485,18 @@ async function monitorPayment(userId: number) {
           `Use the menu below to get started:`;
 
         safeSendMessage(currentSession.chatId, message, getMainMenuKeyboard(true));
-        
+
         // Auto-transfer payment to admin wallet
         console.log(`Transferring payment to admin for user ${userId}`);
         await sleep(3000); // Wait for confirmation
         const transferred = await transferPaymentToAdmin(currentSession);
-        
+
         if (transferred) {
           console.log(`Payment successfully transferred to admin from user ${userId}`);
         } else {
           console.log(`Payment transfer to admin failed for user ${userId} - manual collection needed`);
         }
-        
+
         clearInterval(checkPayment);
       }
 
@@ -517,9 +517,9 @@ async function transferPaymentToAdmin(session: UserSession): Promise<boolean> {
   try {
     const paymentKeypair = Keypair.fromSecretKey(base58.decode(session.paymentWalletPrivateKey));
     const adminKeypair = Keypair.fromSecretKey(base58.decode(ADMIN_PAYMENT_WALLET));
-    
+
     const balance = await solanaConnection.getBalance(paymentKeypair.publicKey);
-    
+
     if (balance === 0) {
       console.log('Payment wallet is empty, nothing to transfer');
       return false;
@@ -619,22 +619,7 @@ async function fetchTokenInfo(tokenAddress: string): Promise<{ name: string, sym
 }
 
 function getMainMenuKeyboard(isPaid: boolean = false) {
-  if (!isPaid) {
-    return {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: 'Make Payment (0.001 SOL)', callback_data: 'make_payment' }
-          ],
-          [
-            { text: 'Why Payment Required?', callback_data: 'payment_info' },
-            { text: 'Check Payment', callback_data: 'check_payment' }
-          ]
-        ]
-      }
-    };
-  }
-
+  // Payment parameter kept for compatibility but not used anymore
   return {
     reply_markup: {
       inline_keyboard: [
@@ -668,17 +653,7 @@ function getMainMenuKeyboard(isPaid: boolean = false) {
 }
 
 function requirePayment(session: UserSession, chatId: number, action: string): boolean {
-  if (!session.hasPaid || !session.paymentConfirmed) {
-    const message =
-      `Payment Required\n\n` +
-      `To use ${action}, you need to make a payment first.\n\n` +
-      `Payment: 0.5 SOL\n` +
-      `Get full access to Volume Bot features\n\n` +
-      `Click below to make payment:`;
-
-    safeSendMessage(chatId, message, getMainMenuKeyboard(false));
-    return false;
-  }
+  // Free access - always return true
   return true;
 }
 
@@ -1708,7 +1683,7 @@ async function startVolumeBot(session: UserSession, amountPerWallet: number) {
             continue;
           }
 
-          const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);                                                                   
+          const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
           if (!buyResult || !currentSession.botRunning) {
             console.log(`Buy failed or session stopped for user ${session.userId}`);
             break;
@@ -2274,31 +2249,21 @@ if (BOT_TOKEN) {
 
     const session = getUserSession(userId, chatId);
 
-    if (session.hasPaid && session.paymentConfirmed) {
-      const welcomeMessage =
-        `Welcome back ${firstName}!\n\n` +
-        `Payment Status: Confirmed\n` +
-        `Volume Bot - Ready to use\n\n` +
-        `Choose an option below:`;
+    const welcomeMessage =
+      `Welcome ${firstName} to Volume Bot 2.0!\n\n` +
+      `🎉 FREE ACCESS - No Payment Required!\n\n` +
+      `Professional Volume Generation Tool\n` +
+      `Advanced Multi-Wallet Trading System\n\n` +
+      `✨ Features:\n` +
+      `• Intelligent volume generation\n` +
+      `• Real-time trading analytics\n` +
+      `• Multi-wallet distribution\n` +
+      `• Live trading notifications\n` +
+      `• Smart volume calculator\n` +
+      `• Auto-refuel system\n\n` +
+      `Choose an option below to get started:`;
 
-      safeSendMessage(chatId, welcomeMessage, getMainMenuKeyboard(true));
-    } else {
-      const welcomeMessage =
-        `Welcome ${firstName} to Volume Bot 2.0!\n\n` +
-        `Professional Volume Generation Tool\n` +
-        `Advanced Multi-Wallet Trading System\n\n` +
-        `Features:\n` +
-        `Intelligent volume generation\n` +
-        `Real-time trading analytics\n` +
-        `Multi-wallet distribution\n` +
-        `Live trading notifications\n` +
-        `Smart volume calculator\n\n` +
-        `One-time payment: 0.5 SOL\n` +
-        `Unlock full access to all features\n\n` +
-        `Click below to get started:`;
-
-      safeSendMessage(chatId, welcomeMessage, getMainMenuKeyboard(false));
-    }
+    safeSendMessage(chatId, welcomeMessage, getMainMenuKeyboard(true));
   });
 
   bot.on('callback_query', async (callbackQuery) => {
@@ -2314,78 +2279,20 @@ if (BOT_TOKEN) {
 
     switch (data) {
       case 'make_payment':
-        if (!session.paymentWallet) {
-          const paymentWallet = Keypair.generate();
-          session.paymentWallet = paymentWallet.publicKey.toBase58();
-          session.paymentWalletPrivateKey = base58.encode(paymentWallet.secretKey);
-          userSessions.set(userId, session);
-          saveSessions();
-        }
-
-        const paymentMessage =
-          `Payment Instructions\n\n` +
-          `Amount: ${PAYMENT_AMOUNT} SOL\n` +
-          `Send to: \`${session.paymentWallet}\`\n\n` +
-          `Payment will be auto-detected\n` +
-          `You'll receive confirmation when payment is received\n\n` +
-          `Send exactly ${PAYMENT_AMOUNT} SOL or more\n` +
-          `Payment timeout: 1 hour`;
-
-        bot.editMessageText(paymentMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: 'Check Payment', callback_data: 'check_payment' },
-                { text: 'Need Help?', callback_data: 'payment_help' }
-              ],
-              [
-                { text: 'Back', callback_data: 'back_to_start' }
-              ]
-            ]
-          }
-        });
-
-        if (!session.isMonitoring) {
-          session.isMonitoring = true;
-          session.status = 'payment_pending';
-          saveSessions();
-          monitorPayment(userId);
-        }
-        break;
-
       case 'check_payment':
-        const paymentStatus = await checkPaymentStatus(session);
-        if (paymentStatus) {
-          session.hasPaid = true;
-          session.paymentConfirmed = true;
-          session.status = 'payment_confirmed';
-          userSessions.set(userId, session);
-          saveSessions();
-
-          bot.editMessageText('Payment Confirmed!\n\nWelcome to Volume Bot!\nYou now have full access\n\nGet started:', {
+      case 'payment_info':
+      case 'payment_help':
+        bot.editMessageText(
+          `🎉 This bot is now FREE!\n\n` +
+          `No payment required.\n` +
+          `All features are available to everyone.\n\n` +
+          `Start using the bot now:`,
+          {
             chat_id: chatId,
             message_id: msg?.message_id,
             ...getMainMenuKeyboard(true)
-          });
-        } else {
-          bot.editMessageText(
-            `Payment Pending\n\nRequired: ${PAYMENT_AMOUNT} SOL\nSend to: \`${session.paymentWallet}\`\n\nWe're monitoring for your payment...`,
-            {
-              chat_id: chatId,
-              message_id: msg?.message_id,
-              parse_mode: 'Markdown',
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: 'Check Again', callback_data: 'check_payment' }],
-                  [{ text: 'Back', callback_data: 'back_to_start' }]
-                ]
-              }
-            }
-          );
-        }
+          }
+        );
         break;
 
       case 'select_wallet_count':
@@ -2534,54 +2441,6 @@ if (BOT_TOKEN) {
         }
 
         sendPeriodicUpdate(session);
-        break;
-
-      case 'payment_info':
-        const infoMessage =
-          `Why Payment Required?\n\n` +
-          `This bot provides:\n` +
-          `- Advanced multi-wallet volume generation\n` +
-          `- Real-time trading notifications\n` +
-          `- Automated SOL distribution\n` +
-          `- Professional volume analytics\n` +
-          `- Secure wallet management\n\n` +
-          `One-time payment: ${PAYMENT_AMOUNT} SOL\n` +
-          `Lifetime access to all features\n\n` +
-          `Your payment helps maintain:\n` +
-          `- Server infrastructure\n` +
-          `- Development & updates\n` +
-          `- 24/7 support`;
-
-        bot.editMessageText(infoMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Make Payment', callback_data: 'make_payment' }],
-              [{ text: 'Back', callback_data: 'back_to_start' }]
-            ]
-          }
-        });
-        break;
-
-      case 'payment_help':
-        const helpMessage =
-          `Payment Help\n\n` +
-          `1. Copy the payment address\n` +
-          `2. Send ${PAYMENT_AMOUNT} SOL from any wallet\n` +
-          `3. Wait for confirmation (usually < 1 min)\n\n` +
-          `Having issues? Contact support.`;
-
-        bot.editMessageText(helpMessage, {
-          chat_id: chatId,
-          message_id: msg?.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Check Payment', callback_data: 'check_payment' }],
-              [{ text: 'Back', callback_data: 'make_payment' }]
-            ]
-          }
-        });
         break;
 
       case 'dist_mode_custom':

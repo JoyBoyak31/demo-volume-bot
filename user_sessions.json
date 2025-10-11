@@ -33,7 +33,7 @@
     "paymentWalletPrivateKey": "62Za3jvoSbkA5KTea3V3arGwgAxxxHju2Te2L4o3zUSejyV4GjP3cjCHm4jLNCvfiFGzwj5nMze3C3r3EsKWM5PJ",
     "hasPaid": true,
     "paymentConfirmed": true,
-    "selectedWalletCount": 2,
+    "selectedWalletCount": 10,
     "awaitingWithdrawalAddress": false,
     "tokenAddress": "ncpZnuq241W3wuYcQF9paRz3yASMXN3fLkuVbuaNATH",
     "tokenName": "Nurse Lives Matter",
@@ -304,6 +304,36 @@
     "paymentWalletPrivateKey": "5dvjTzMwqAkJpyrKXJjvijx3fch3HksGt9WiYb8oH2QdTcGktU3mwm29ntuyfTT1UurRNYJ5BsxmgHSA125J1dWF",
     "paymentAmount": 0.001,
     "paymentConfirmed": false,
+    "selectedWalletCount": 2,
+    "distributionConfig": {
+      "mode": "auto"
+    }
+  },
+  "7261308722": {
+    "userId": 7261308722,
+    "chatId": 7261308722,
+    "status": "payment_confirmed",
+    "requiredDeposit": 0.02,
+    "isMonitoring": true,
+    "botRunning": false,
+    "tradingWallets": [],
+    "tradingWalletsHistory": [],
+    "createdAt": 1760104314144,
+    "tradingStats": {
+      "totalBuys": 0,
+      "totalSells": 0,
+      "totalVolumeSOL": 0,
+      "successfulTxs": 0,
+      "failedTxs": 0,
+      "startTime": 0,
+      "lastActivity": 0,
+      "lastUpdateSent": 0
+    },
+    "hasPaid": true,
+    "paymentWallet": "6iduWoTNpAfB8QnAQRDMHEH2w4Dt6v7K3g6MtVAGp5BK",
+    "paymentWalletPrivateKey": "48v5rwGpVrTY6NoJQW66NE7sux9KaZXnAx8qXWZqAAFEek99GCEedWWy8sh6ycRhyBxSrKhmye8LpGwJVG1EPHEV",
+    "paymentAmount": 0.001,
+    "paymentConfirmed": true,
     "selectedWalletCount": 2,
     "distributionConfig": {
       "mode": "auto"
