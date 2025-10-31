@@ -214,7 +214,14 @@ export async function getSellTx(solanaConnection: Connection, wallet: Keypair, b
 
 // Jupiter API response interfaces
 interface JupiterQuoteResponse {
-  swapTransaction: string;
+  error?: string;
+  outAmount?: string;
+  [key: string]: any;
+}
+
+interface JupiterSwapResponse {
+  swapTransaction?: string;
+  error?: string;
   [key: string]: any;
 }
 
@@ -230,7 +237,7 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
         'accept': 'application/json',
         'origin': 'https://jup.ag'
       }
-    }).then(res => res.json());
+    }).then(res => res.json()) as JupiterQuoteResponse;
     
     if (quoteResponse.error || !quoteResponse.outAmount) {
       console.log('Quote failed:', JSON.stringify(quoteResponse));
@@ -252,16 +259,16 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
         dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: 100000
       })
-    }).then(res => res.json());
+    }).then(res => res.json()) as JupiterSwapResponse;
     
     if (!swapResponse.swapTransaction) {
       console.log('No swap transaction returned');
       return null;
     }
     
-    // Deserialize and sign
+    // Deserialize and sign - fix Buffer to Uint8Array conversion
     const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
     transaction.sign([wallet]);
     
     return transaction;
@@ -281,7 +288,7 @@ export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey,
         'accept': 'application/json',
         'origin': 'https://jup.ag'
       }
-    }).then(res => res.json());
+    }).then(res => res.json()) as JupiterQuoteResponse;
     
     if (quoteResponse.error || !quoteResponse.outAmount) {
       console.log('Sell quote failed:', JSON.stringify(quoteResponse));
@@ -304,16 +311,16 @@ export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey,
         dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: 100000
       })
-    }).then(res => res.json());
+    }).then(res => res.json()) as JupiterSwapResponse;
     
     if (!swapResponse.swapTransaction) {
       console.log('No sell swap transaction returned');
       return null;
     }
     
-    // Deserialize and sign
+    // Deserialize and sign - fix Buffer to Uint8Array conversion
     const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
     transaction.sign([wallet]);
     
     return transaction;
