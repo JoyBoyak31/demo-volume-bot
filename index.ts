@@ -2251,7 +2251,6 @@ if (BOT_TOKEN) {
 
     const welcomeMessage =
       `Welcome ${firstName} to Volume Bot 2.0!\n\n` +
-      `🎉 FREE ACCESS - No Payment Required!\n\n` +
       `Professional Volume Generation Tool\n` +
       `Advanced Multi-Wallet Trading System\n\n` +
       `✨ Features:\n` +
