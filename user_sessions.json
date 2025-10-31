@@ -299,15 +299,21 @@
       "lastActivity": 0,
       "lastUpdateSent": 0
     },
-    "hasPaid": false,
+    "hasPaid": true,
     "paymentWallet": "GCwgAUi1tLFK2nbHoKwwrCFRPwSAt7y4WBAQPXmdjma7",
     "paymentWalletPrivateKey": "5dvjTzMwqAkJpyrKXJjvijx3fch3HksGt9WiYb8oH2QdTcGktU3mwm29ntuyfTT1UurRNYJ5BsxmgHSA125J1dWF",
     "paymentAmount": 0.001,
-    "paymentConfirmed": false,
+    "paymentConfirmed": true,
     "selectedWalletCount": 2,
     "distributionConfig": {
       "mode": "auto"
-    }
+    },
+    "walletKeypair": "66G7FW6hPZSGyVNpA7v4roKvQSkW9Cf86qNyYHVs5FuDc4KaR9GqL8ZtbowUwsDkNJAKQvQuSRDN9bCjZ891DcvE",
+    "userWalletPrivateKey": "66G7FW6hPZSGyVNpA7v4roKvQSkW9Cf86qNyYHVs5FuDc4KaR9GqL8ZtbowUwsDkNJAKQvQuSRDN9bCjZ891DcvE",
+    "depositAddress": "R8ccckVzvRVffjdVZShJ7f5URuczHSmSAFafnfNckfk",
+    "tokenAddress": "9XgfFWPxPU6hyDyGtfhC9D6eyRE3RUSgAYKHRznWpump",
+    "tokenName": "Remember KitKat",
+    "tokenSymbol": "kitkat"
   },
   "7261308722": {
     "userId": 7261308722,

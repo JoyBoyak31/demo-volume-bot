@@ -2295,7 +2295,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'select_wallet_count':
-        if (!requirePayment(session, chatId, 'Wallet Selection')) return;
         bot.editMessageText(
           `Select Trading Wallets\n\nChoose how many wallets for volume:\n\nMore wallets = More realistic\nFewer wallets = Faster\n\nCurrent: ${session.selectedWalletCount} wallets`,
           { chat_id: chatId, message_id: msg?.message_id, ...getWalletSelectionKeyboard() }
@@ -2331,12 +2330,10 @@ if (BOT_TOKEN) {
         break;
 
       case 'distribution_mode':
-        if (!requirePayment(session, chatId, 'Distribution Mode')) return;
         handleDistributionMode(userId, chatId, msg?.message_id);
         break;
 
       case 'dist_mode_auto':
-        if (!requirePayment(session, chatId, 'Distribution Mode')) return;
         session.distributionConfig = { mode: 'auto' };
         userSessions.set(userId, session);
         saveSessions();
@@ -2357,7 +2354,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'withdraw_sol':
-        if (!requirePayment(session, chatId, 'Withdraw SOL')) return;
 
         if (!session.walletKeypair) {
           bot.editMessageText('No wallet found. Create one first!', {
@@ -2398,7 +2394,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'status_report':
-        if (!requirePayment(session, chatId, 'Status Report')) return;
 
         const stats = session.tradingStats;
         const runtime = stats.startTime > 0 ? (Date.now() - stats.startTime) / 1000 / 60 : 0;
@@ -2428,7 +2423,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'live_stats':
-        if (!requirePayment(session, chatId, 'Live Stats')) return;
 
         if (!session.botRunning) {
           bot.editMessageText('No active trading session.', {
@@ -2443,7 +2437,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'dist_mode_custom':
-        if (!requirePayment(session, chatId, 'Distribution Mode')) return;
         session.status = 'awaiting_distribution_amount';
         userSessions.set(userId, session);
         saveSessions();
@@ -2463,22 +2456,18 @@ if (BOT_TOKEN) {
         break;
 
       case 'volume_calculator':
-        if (!requirePayment(session, chatId, 'Volume Calculator')) return;
         handleVolumeCalculator(userId, chatId, msg?.message_id);
         break;
 
       case 'create_wallet':
-        if (!requirePayment(session, chatId, 'Wallet Creation')) return;
         handleCreateWallet(userId, chatId, msg?.message_id);
         break;
 
       case 'check_balance':
-        if (!requirePayment(session, chatId, 'Balance Check')) return;
         handleCheckBalance(userId, chatId, msg?.message_id);
         break;
 
       case 'add_token':
-        if (!requirePayment(session, chatId, 'Add Token')) return;
         bot.editMessageText(
           `Add Token\n\nEnter the token address:\n\nSend the token contract address as a message\nBot will validate automatically\n\nAccepts any Solana token with liquidity`,
           {
@@ -2492,22 +2481,18 @@ if (BOT_TOKEN) {
         break;
 
       case 'start_volume':
-        if (!requirePayment(session, chatId, 'Volume Generation')) return;
         handleStartVolume(userId, chatId, msg?.message_id);
         break;
 
       case 'stop_volume':
-        if (!requirePayment(session, chatId, 'Stop Volume')) return;
         handleStopVolume(userId, chatId, msg?.message_id);
         break;
 
       case 'export_session':
-        if (!requirePayment(session, chatId, 'Export Session')) return;
         handleExportSession(userId, chatId, msg?.message_id);
         break;
 
       case 'show_main_key':
-        if (!requirePayment(session, chatId, 'View Private Key')) return;
         handleShowMainKey(userId, chatId, msg?.message_id);
         break;
 
@@ -2530,7 +2515,6 @@ if (BOT_TOKEN) {
         break;
 
       case 'force_new_wallet':
-        if (!requirePayment(session, chatId, 'Create New Wallet')) return;
 
         session.walletKeypair = undefined;
         session.userWalletPrivateKey = undefined;
@@ -2545,7 +2529,6 @@ if (BOT_TOKEN) {
 
       default:
         if (data && data.startsWith('change_token_')) {
-          if (!requirePayment(session, chatId, 'Change Token')) return;
 
           const newTokenAddress = data.replace('change_token_', '');
 
