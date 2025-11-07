@@ -874,7 +874,8 @@ async function handleDistributionMode(userId: number, chatId: number, messageId?
   }
 }
 
-async function handleExportSession(userId: number, chatId: number, messageId?: number) {
+async function 
+handleExportSession(userId: number, chatId: number, messageId?: number) {
   try {
     const session = getUserSession(userId, chatId);
 
@@ -1225,7 +1226,7 @@ async function handleCheckBalance(userId: number, chatId: number, messageId?: nu
               { text: 'Withdraw', callback_data: 'withdraw_sol' }
             ],
             [
-              { text: 'Volume Calculator', callback_data: 'volume_calculator' }
+              { text: 'Add Token', callback_data: 'add_token' }
             ],
             [
               { text: 'Back to Menu', callback_data: 'back_to_menu' }
