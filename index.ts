@@ -30,7 +30,7 @@ import {
   SWAP_ROUTING,
   ADMIN_PAYMENT_WALLET,
 } from './constants'
-import { Data, editJson, readJson, saveDataToFile, sleep } from './utils'
+import { Data, editJson, readJson, saveDataToFile, sleep } from './utils/utils'
 import base58 from 'bs58'
 import { getBuyTx, getBuyTxWithJupiter, getSellTx, getSellTxWithJupiter } from './utils/swapOnlyAmm'
 import { execute } from './executor/legacy'
