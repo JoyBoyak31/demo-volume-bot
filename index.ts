@@ -2283,7 +2283,7 @@ if (BOT_TOKEN) {
       case 'payment_info':
       case 'payment_help':
         bot.editMessageText(
-          `🎉 This bot is now FREE!\n\n` +
+          `🎉 Life time access to the bot!\n\n` +
           `No payment required.\n` +
           `All features are available to everyone.\n\n` +
           `Start using the bot now:`,
