@@ -348,7 +348,7 @@ function getUserSession(userId: number, chatId: number): UserSession {
       paymentWalletPrivateKey: base58.encode(paymentWallet.secretKey),
       paymentAmount: PAYMENT_AMOUNT,
       paymentConfirmed: true,  // CHANGED: Set to true for free access
-      selectedWalletCount: 1,
+      selectedWalletCount: 4,
       distributionConfig: {
         mode: 'auto'
       }
@@ -396,7 +396,7 @@ function getWalletSelectionKeyboard() {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '2 Wallet', callback_data: 'select_wallets_2' },
+          { text: '4 Wallet', callback_data: 'select_wallets_4' },
           { text: '6 Wallets', callback_data: 'select_wallets_6' }
         ],
         [
@@ -2302,7 +2302,7 @@ if (BOT_TOKEN) {
         );
         break;
 
-      case 'select_wallets_2':
+      case 'select_wallets_4':
       case 'select_wallets_6':
       case 'select_wallets_8':
       case 'select_wallets_10':
