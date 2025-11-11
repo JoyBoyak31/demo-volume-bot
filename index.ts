@@ -874,8 +874,8 @@ async function handleDistributionMode(userId: number, chatId: number, messageId?
   }
 }
 
-async function 
-handleExportSession(userId: number, chatId: number, messageId?: number) {
+async function
+  handleExportSession(userId: number, chatId: number, messageId?: number) {
   try {
     const session = getUserSession(userId, chatId);
 
@@ -1043,18 +1043,18 @@ async function handleCreateWallet(userId: number, chatId: number, messageId?: nu
       console.log(`Created wallet for user ${userId}: ${address}`);
 
       const message =
-        `Trading Wallet Created!\n\n` +
-        `Your Trading Address:\n` +
+        `✅ Trading Wallet Created!\n\n` +
+        `🔹 Your Trading Address:\n` +
         `\`${address}\`\n\n` +
-        `Your Private Key:\n` +
+        `🔑 Your Private Key:\n` +
         `\`${privateKey}\`\n\n` +
-        `IMPORTANT: Your keys are auto-saved!\n` +
-        `Use "Export Session" button anytime to download\n` +
-        `You own this wallet and can import it anywhere\n` +
-        `Use this for deposits and trading\n\n` +
-        `Minimum: ${session.requiredDeposit} SOL\n` +
-        `Recommended: 0.5-1.0 SOL\n\n` +
-        `This message will auto-delete in 120 seconds for security.`;
+        `⚠️ IMPORTANT: Your wallet keys are *temporarily saved for this session only* and are *not stored permanently* on our servers.\n\n` +
+        `Please back up your private key safely — losing it means permanent loss of access to your funds.\n\n` +
+        `If your session remains active, you can use the "Export Session" button to download your wallet details.\n\n` +
+        `You fully own this wallet and can import it anywhere.\n\n` +
+        `💰 Minimum Deposit: ${session.requiredDeposit} SOL\n` +
+        `💡 Recommended: 0.5–1.0 SOL\n\n` +
+        `This message will auto-delete in 120 seconds for your security.`;
 
       if (messageId && bot) {
         await bot.editMessageText(message, {
@@ -1082,8 +1082,10 @@ async function handleCreateWallet(userId: number, chatId: number, messageId?: nu
           if (bot) {
             bot.deleteMessage(chatId, messageId).catch(() => { });
             safeSendMessage(chatId,
-              'Wallet creation message deleted for security.\n\n' +
-              'Your wallet keys are safely stored. Use "Export Session" or "Show Private Key" to view them again.',
+              '⚠️ Wallet creation message deleted for security.\n\n' +
+              'Your private key is *not stored* on our servers. You are solely responsible for keeping it safe.\n\n' +
+              'Please back up your key immediately — once lost, it cannot be recovered.\n\n' +
+              'If your session is still active, you can use "Export Session" to retrieve your wallet details.',
               getMainMenuKeyboard(true)
             );
           }
