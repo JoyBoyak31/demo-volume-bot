@@ -1,5 +1,4 @@
 import assert from 'assert';
-
 import {
   jsonInfo2PoolKeys,
   Liquidity,
@@ -32,6 +31,10 @@ import { TOKEN_MINT, TX_FEE } from '../constants';
 import base58 from 'bs58';
 import { BN } from 'bn.js';
 
+// -------------------- CACHES --------------------
+const walletTokenAccountsCache = new Map<string, TokenAccount[]>()
+const poolInfoCache = new Map<string, ApiPoolInfoV4>()
+
 type WalletTokenAccounts = Awaited<ReturnType<typeof getWalletTokenAccount>>
 type TestTxInputInfo = {
   outputToken: Token
@@ -42,6 +45,7 @@ type TestTxInputInfo = {
   wallet: Keypair
 }
 
+// -------------------- WALLET ACCOUNT --------------------
 async function getWalletTokenAccount(connection: Connection, wallet: PublicKey): Promise<TokenAccount[]> {
   const walletTokenAccount = await connection.getTokenAccountsByOwner(wallet, {
     programId: TOKEN_PROGRAM_ID,
@@ -53,13 +57,30 @@ async function getWalletTokenAccount(connection: Connection, wallet: PublicKey):
   }));
 }
 
+async function getCachedWalletTokenAccounts(connection: Connection, wallet: PublicKey) {
+  const key = wallet.toBase58()
+  if (walletTokenAccountsCache.has(key)) return walletTokenAccountsCache.get(key)!
+  const accounts = await getWalletTokenAccount(connection, wallet)
+  walletTokenAccountsCache.set(key, accounts)
+  return accounts
+}
+
+// -------------------- POOL INFO --------------------
+async function getCachedPoolInfo(connection: Connection, poolId: string) {
+  if (poolInfoCache.has(poolId)) return poolInfoCache.get(poolId)!
+  const info = await formatAmmKeysById(connection, poolId)
+  poolInfoCache.set(poolId, info)
+  return info
+}
+
+// -------------------- SWAP INSTRUCTIONS --------------------
 async function swapOnlyAmm(connection: Connection, input: TestTxInputInfo) {
-  // -------- pre-action: get pool info --------
-  const targetPoolInfo = await formatAmmKeysById(connection, input.targetPool)
+  // Get pool info from cache
+  const targetPoolInfo = await getCachedPoolInfo(connection, input.targetPool)
   assert(targetPoolInfo, 'cannot find the target pool')
   const poolKeys = jsonInfo2PoolKeys(targetPoolInfo) as LiquidityPoolKeys
 
-  // -------- step 1: coumpute amount out --------
+  // Compute amount out
   const { amountOut, minAmountOut } = Liquidity.computeAmountOut({
     poolKeys: poolKeys,
     poolInfo: await Liquidity.fetchInfo({ connection, poolKeys }),
@@ -68,12 +89,15 @@ async function swapOnlyAmm(connection: Connection, input: TestTxInputInfo) {
     slippage: input.slippage,
   })
 
-  // -------- step 2: create instructions by SDK function --------
+  // Get wallet token accounts from cache
+  const walletTokenAccounts = await getCachedWalletTokenAccounts(connection, input.wallet.publicKey)
+
+  // Build swap instructions
   const { innerTransactions } = await Liquidity.makeSwapInstructionSimple({
     connection,
     poolKeys,
     userKeys: {
-      tokenAccounts: input.walletTokenAccounts,
+      tokenAccounts: walletTokenAccounts,
       owner: input.wallet.publicKey,
     },
     amountIn: input.inputTokenAmount,
@@ -88,19 +112,20 @@ async function swapOnlyAmm(connection: Connection, input: TestTxInputInfo) {
   return innerTransactions
 }
 
+// -------------------- POOL INFO FORMAT --------------------
 export async function formatAmmKeysById(connection: Connection, id: string): Promise<ApiPoolInfoV4> {
   const account = await connection.getAccountInfo(new PublicKey(id))
-  if (account === null) throw Error(' get id info error ')
+  if (!account) throw Error(' get id info error ')
   const info = LIQUIDITY_STATE_LAYOUT_V4.decode(account.data)
 
   const marketId = info.marketId
   const marketAccount = await connection.getAccountInfo(marketId)
-  if (marketAccount === null) throw Error(' get market info error')
+  if (!marketAccount) throw Error(' get market info error')
   const marketInfo = MARKET_STATE_LAYOUT_V3.decode(marketAccount.data)
 
   const lpMint = info.lpMint
   const lpMintAccount = await connection.getAccountInfo(lpMint)
-  if (lpMintAccount === null) throw Error(' get lp mint info error')
+  if (!lpMintAccount) throw Error(' get lp mint info error')
   const lpMintInfo = SPL_MINT_LAYOUT.decode(lpMintAccount.data)
 
   return {
@@ -133,28 +158,30 @@ export async function formatAmmKeysById(connection: Connection, id: string): Pro
   }
 }
 
-export async function getBuyTx(solanaConnection: Connection, wallet: Keypair, baseMint: PublicKey, quoteMint: PublicKey, amount: number, targetPool: string) {
+// -------------------- BUY / SELL TX --------------------
+export async function getBuyTx(
+  solanaConnection: Connection,
+  wallet: Keypair,
+  baseMint: PublicKey,
+  quoteMint: PublicKey,
+  amount: number,
+  targetPool: string
+) {
   const baseInfo = await getMint(solanaConnection, baseMint)
-  if (baseInfo == null) {
-    return null
-  }
+  if (!baseInfo) return null
 
-  const baseDecimal = baseInfo.decimals
-
-  const baseToken = new Token(TOKEN_PROGRAM_ID, baseMint, baseDecimal)
+  const baseToken = new Token(TOKEN_PROGRAM_ID, baseMint, baseInfo.decimals)
   const quoteToken = new Token(TOKEN_PROGRAM_ID, quoteMint, 9)
-
   const quoteTokenAmount = new TokenAmount(quoteToken, Math.floor(amount * 10 ** 9))
   const slippage = new Percent(100, 100)
-  const walletTokenAccounts = await getWalletTokenAccount(solanaConnection, wallet.publicKey)
 
   const instructions = await swapOnlyAmm(solanaConnection, {
     outputToken: baseToken,
     targetPool,
     inputTokenAmount: quoteTokenAmount,
     slippage,
-    walletTokenAccounts,
-    wallet: wallet,
+    walletTokenAccounts: await getCachedWalletTokenAccounts(solanaConnection, wallet.publicKey),
+    wallet
   })
 
   const willSendTx = (await buildSimpleTransaction({
@@ -164,6 +191,7 @@ export async function getBuyTx(solanaConnection: Connection, wallet: Keypair, ba
     innerTransactions: instructions,
     addLookupTableInfo: LOOKUP_TABLE_CACHE
   }))[0]
+
   if (willSendTx instanceof VersionedTransaction) {
     willSendTx.sign([wallet])
     return willSendTx
@@ -171,27 +199,31 @@ export async function getBuyTx(solanaConnection: Connection, wallet: Keypair, ba
   return null
 }
 
-export async function getSellTx(solanaConnection: Connection, wallet: Keypair, baseMint: PublicKey, quoteMint: PublicKey, amount: string, targetPool: string) {
+export async function getSellTx(
+  solanaConnection: Connection,
+  wallet: Keypair,
+  baseMint: PublicKey,
+  quoteMint: PublicKey,
+  amount: string,
+  targetPool: string
+) {
   try {
     const tokenAta = await getAssociatedTokenAddress(baseMint, wallet.publicKey)
     const tokenBal = await solanaConnection.getTokenAccountBalance(tokenAta)
-    if (!tokenBal || tokenBal.value.uiAmount == 0)
-      return null
-    const balance = tokenBal.value.amount
-    tokenBal.value.decimals
+    if (!tokenBal || tokenBal.value.uiAmount == 0) return null
+
     const baseToken = new Token(TOKEN_PROGRAM_ID, baseMint, tokenBal.value.decimals)
     const quoteToken = new Token(TOKEN_PROGRAM_ID, quoteMint, 9)
     const baseTokenAmount = new TokenAmount(baseToken, amount)
     const slippage = new Percent(99, 100)
-    const walletTokenAccounts = await getWalletTokenAccount(solanaConnection, wallet.publicKey)
 
     const instructions = await swapOnlyAmm(solanaConnection, {
       outputToken: quoteToken,
       targetPool,
       inputTokenAmount: baseTokenAmount,
       slippage,
-      walletTokenAccounts,
-      wallet: wallet,
+      walletTokenAccounts: await getCachedWalletTokenAccounts(solanaConnection, wallet.publicKey),
+      wallet
     })
 
     const willSendTx = (await buildSimpleTransaction({
@@ -201,6 +233,7 @@ export async function getSellTx(solanaConnection: Connection, wallet: Keypair, b
       innerTransactions: instructions,
       addLookupTableInfo: LOOKUP_TABLE_CACHE
     }))[0]
+
     if (willSendTx instanceof VersionedTransaction) {
       willSendTx.sign([wallet])
       return willSendTx
@@ -212,7 +245,7 @@ export async function getSellTx(solanaConnection: Connection, wallet: Keypair, b
   }
 }
 
-// Jupiter API response interfaces
+// -------------------- JUPITER TX --------------------
 interface JupiterQuoteResponse {
   error?: string;
   outAmount?: string;
@@ -227,105 +260,63 @@ interface JupiterSwapResponse {
 
 export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: number) => {
   try {
-    const lamports = Math.floor(amount * 1e9);
-    
-    // Get Quote using v1 API
-    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${baseMint.toBase58()}&amount=${lamports}&slippageBps=100`;
-    
-    const quoteResponse = await fetch(quoteUrl, {
-      headers: {
-        'accept': 'application/json',
-        'origin': 'https://jup.ag'
-      }
-    }).then(res => res.json()) as JupiterQuoteResponse;
-    
+    const lamports = Math.floor(amount * 1e9)
+    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${baseMint.toBase58()}&amount=${lamports}&slippageBps=100`
+
+    const quoteResponse = await fetch(quoteUrl, { headers: { accept: 'application/json', origin: 'https://jup.ag' } })
+      .then(res => res.json()) as JupiterQuoteResponse
     if (quoteResponse.error || !quoteResponse.outAmount) {
-      console.log('Quote failed:', JSON.stringify(quoteResponse));
-      return null;
+      console.log('Quote failed:', JSON.stringify(quoteResponse))
+      return null
     }
-    
-    // Get Swap Transaction
+
     const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'origin': 'https://jup.ag'
-      },
-      body: JSON.stringify({
-        userPublicKey: wallet.publicKey.toString(),
-        wrapAndUnwrapSol: true,
-        quoteResponse: quoteResponse,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 100000
-      })
-    }).then(res => res.json()) as JupiterSwapResponse;
-    
+      headers: { 'Content-Type': 'application/json', accept: 'application/json', origin: 'https://jup.ag' },
+      body: JSON.stringify({ userPublicKey: wallet.publicKey.toString(), wrapAndUnwrapSol: true, quoteResponse, dynamicComputeUnitLimit: true, prioritizationFeeLamports: 100000 })
+    }).then(res => res.json()) as JupiterSwapResponse
     if (!swapResponse.swapTransaction) {
-      console.log('No swap transaction returned');
-      return null;
+      console.log('No swap transaction returned')
+      return null
     }
-    
-    // Deserialize and sign - fix Buffer to Uint8Array conversion
-    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-    transaction.sign([wallet]);
-    
-    return transaction;
+
+    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64')
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf))
+    transaction.sign([wallet])
+    return transaction
   } catch (error) {
-    console.log("Failed to get buy transaction:", error);
-    return null;
+    console.log("Failed to get buy transaction:", error)
+    return null
   }
-};
+}
 
 export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: string) => {
   try {
-    // Get Quote for selling
-    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${baseMint.toBase58()}&outputMint=So11111111111111111111111111111111111111112&amount=${amount}&slippageBps=100`;
-    
-    const quoteResponse = await fetch(quoteUrl, {
-      headers: {
-        'accept': 'application/json',
-        'origin': 'https://jup.ag'
-      }
-    }).then(res => res.json()) as JupiterQuoteResponse;
-    
+    const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${baseMint.toBase58()}&outputMint=So11111111111111111111111111111111111111112&amount=${amount}&slippageBps=100`
+
+    const quoteResponse = await fetch(quoteUrl, { headers: { accept: 'application/json', origin: 'https://jup.ag' } })
+      .then(res => res.json()) as JupiterQuoteResponse
     if (quoteResponse.error || !quoteResponse.outAmount) {
-      console.log('Sell quote failed:', JSON.stringify(quoteResponse));
-      return null;
+      console.log('Sell quote failed:', JSON.stringify(quoteResponse))
+      return null
     }
-    
-    // Get Swap Transaction
+
     const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'origin': 'https://jup.ag'
-      },
-      body: JSON.stringify({
-        userPublicKey: wallet.publicKey.toString(),
-        wrapAndUnwrapSol: true,
-        useSharedAccounts: false,
-        quoteResponse: quoteResponse,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 100000
-      })
-    }).then(res => res.json()) as JupiterSwapResponse;
-    
+      headers: { 'Content-Type': 'application/json', accept: 'application/json', origin: 'https://jup.ag' },
+      body: JSON.stringify({ userPublicKey: wallet.publicKey.toString(), wrapAndUnwrapSol: true, useSharedAccounts: false, quoteResponse, dynamicComputeUnitLimit: true, prioritizationFeeLamports: 100000 })
+    }).then(res => res.json()) as JupiterSwapResponse
     if (!swapResponse.swapTransaction) {
-      console.log('No sell swap transaction returned');
-      return null;
+      console.log('No sell swap transaction returned')
+      return null
     }
-    
-    // Deserialize and sign - fix Buffer to Uint8Array conversion
-    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-    transaction.sign([wallet]);
-    
-    return transaction;
+
+    const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64')
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf))
+    transaction.sign([wallet])
+    return transaction
   } catch (error) {
-    console.log("Failed to get sell transaction:", error);
-    return null;
+    console.log("Failed to get sell transaction:", error)
+    return null
   }
-};
+}

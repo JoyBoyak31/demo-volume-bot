@@ -75,7 +75,7 @@ interface UserSession {
   tokenAddress?: string;
   tokenName?: string;
   tokenSymbol?: string;
-  status: 'idle' | 'payment_pending' | 'payment_confirmed' | 'wallet_created' | 'token_set' | 'wallet_selection' | 'trading' | 'stopped' | 'awaiting_withdraw_address' | 'awaiting_distribution_amount';
+  status: 'idle' | 'payment_pending' | 'payment_confirmed' | 'wallet_created' | 'token_set' | 'wallet_selection' | 'trading' | 'stopped' | 'awaiting_withdraw_address' | 'awaiting_distribution_amount' | 'awaiting_buy_amount';
   depositAddress?: string;
   requiredDeposit: number;
   isMonitoring: boolean;
@@ -93,12 +93,32 @@ interface UserSession {
   selectedWalletCount: number;
   lastExportTime?: number;
   distributionConfig: DistributionConfig;
+  buyAmountConfig: {
+    mode: 'default' | 'custom'; // default uses constants, custom uses user value
+    customAmount?: number; // user's preferred buy amount
+  };
+}
+
+interface CachedTokenAccount {
+  address: string;
+  mint: string;
+  owner: string;
+  lastUpdated: number;
+}
+
+interface WalletCache {
+  tokenAccounts: Map<string, CachedTokenAccount>;
+  lastBalanceCheck: number;
+  balance: number;
 }
 
 const userSessions = new Map<number, UserSession>();
 const SESSION_FILE = './user_sessions.json';
 const SESSIONS_DIR = './user_sessions';
 const activeTraders = new Set<number>();
+const walletCacheMap = new Map<string, WalletCache>();
+const TOKEN_ACCOUNT_CACHE_TTL = 60000; // 1 minute cache
+const BALANCE_CACHE_TTL = 15000; // 15 seconds cache
 
 // Volume calculation helper
 function calculateVolumeEstimate(totalSOL: number, walletCount: number) {
@@ -127,6 +147,143 @@ function calculateVolumeEstimate(totalSOL: number, walletCount: number) {
     totalFees,
     availableForTrading
   };
+}
+
+// Optimized balance check with caching
+async function getCachedBalance(publicKey: PublicKey, forceRefresh = false): Promise<number> {
+  const key = publicKey.toBase58();
+  const cached = walletCacheMap.get(key);
+  const now = Date.now();
+
+  if (!forceRefresh && cached && (now - cached.lastBalanceCheck) < BALANCE_CACHE_TTL) {
+    return cached.balance;
+  }
+
+  try {
+    const balance = await solanaConnection.getBalance(publicKey, 'confirmed');
+    const solBalance = balance / LAMPORTS_PER_SOL;
+
+    if (!cached) {
+      walletCacheMap.set(key, {
+        tokenAccounts: new Map(),
+        lastBalanceCheck: now,
+        balance: solBalance
+      });
+    } else {
+      cached.balance = solBalance;
+      cached.lastBalanceCheck = now;
+    }
+
+    return solBalance;
+  } catch (error) {
+    console.error('Balance check error:', error);
+    return cached?.balance || 0;
+  }
+}
+
+// Batch balance checker for multiple wallets
+async function batchCheckBalances(wallets: Keypair[]): Promise<Map<string, number>> {
+  const balances = new Map<string, number>();
+  const walletsToFetch: Keypair[] = [];
+  const now = Date.now();
+
+  for (const wallet of wallets) {
+    const key = wallet.publicKey.toBase58();
+    const cached = walletCacheMap.get(key);
+
+    if (cached && (now - cached.lastBalanceCheck) < BALANCE_CACHE_TTL) {
+      balances.set(key, cached.balance);
+    } else {
+      walletsToFetch.push(wallet);
+    }
+  }
+
+  if (walletsToFetch.length > 0) {
+    try {
+      const publicKeys = walletsToFetch.map(w => w.publicKey);
+      const accountInfos = await solanaConnection.getMultipleAccountsInfo(publicKeys, 'confirmed');
+
+      accountInfos.forEach((info, index) => {
+        const wallet = walletsToFetch[index];
+        const key = wallet.publicKey.toBase58();
+        const balance = info ? info.lamports / LAMPORTS_PER_SOL : 0;
+
+        balances.set(key, balance);
+
+        const cached = walletCacheMap.get(key);
+        if (cached) {
+          cached.balance = balance;
+          cached.lastBalanceCheck = now;
+        } else {
+          walletCacheMap.set(key, {
+            tokenAccounts: new Map(),
+            lastBalanceCheck: now,
+            balance
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Batch balance check error:', error);
+      for (const wallet of walletsToFetch) {
+        try {
+          const balance = await getCachedBalance(wallet.publicKey, true);
+          balances.set(wallet.publicKey.toBase58(), balance);
+        } catch (err) {
+          balances.set(wallet.publicKey.toBase58(), 0);
+        }
+      }
+    }
+  }
+
+  return balances;
+}
+
+// Optimized token account fetching with caching
+async function getCachedTokenAccount(
+  wallet: PublicKey,
+  mint: PublicKey,
+  forceRefresh = false
+): Promise<PublicKey | null> {
+  const walletKey = wallet.toBase58();
+  const mintKey = mint.toBase58();
+  const cached = walletCacheMap.get(walletKey);
+  const now = Date.now();
+
+  if (!forceRefresh && cached) {
+    const cachedAccount = cached.tokenAccounts.get(mintKey);
+    if (cachedAccount && (now - cachedAccount.lastUpdated) < TOKEN_ACCOUNT_CACHE_TTL) {
+      return new PublicKey(cachedAccount.address);
+    }
+  }
+
+  try {
+    const tokenAccount = await getAssociatedTokenAddress(mint, wallet);
+
+    if (!cached) {
+      walletCacheMap.set(walletKey, {
+        tokenAccounts: new Map([[mintKey, {
+          address: tokenAccount.toBase58(),
+          mint: mintKey,
+          owner: walletKey,
+          lastUpdated: now
+        }]]),
+        lastBalanceCheck: 0,
+        balance: 0
+      });
+    } else {
+      cached.tokenAccounts.set(mintKey, {
+        address: tokenAccount.toBase58(),
+        mint: mintKey,
+        owner: walletKey,
+        lastUpdated: now
+      });
+    }
+
+    return tokenAccount;
+  } catch (error) {
+    console.error('Token account fetch error:', error);
+    return null;
+  }
 }
 
 function ensureSessionsDirectory() {
@@ -343,15 +500,18 @@ function getUserSession(userId: number, chatId: number): UserSession {
         lastActivity: 0,
         lastUpdateSent: 0
       },
-      hasPaid: true,  // CHANGED: Set to true for free access
+      hasPaid: true,
       paymentWallet: paymentWallet.publicKey.toBase58(),
       paymentWalletPrivateKey: base58.encode(paymentWallet.secretKey),
       paymentAmount: PAYMENT_AMOUNT,
-      paymentConfirmed: true,  // CHANGED: Set to true for free access
+      paymentConfirmed: true,
       selectedWalletCount: 1,
       distributionConfig: {
         mode: 'auto'
-      }
+      },
+      buyAmountConfig: {          // ADD THIS
+        mode: 'default'            // ADD THIS
+      }                            // ADD THIS
     };
 
     userSessions.set(userId, session);
@@ -373,6 +533,13 @@ function getUserSession(userId: number, chatId: number): UserSession {
     // Initialize distribution config if missing
     if (!session.distributionConfig) {
       session.distributionConfig = { mode: 'auto' };
+      userSessions.set(userId, session);
+      saveSessions();
+    }
+
+    // Initialize buy amount config if missing
+    if (!session.buyAmountConfig) {
+      session.buyAmountConfig = { mode: 'default' };
       userSessions.set(userId, session);
       saveSessions();
     }
@@ -423,6 +590,24 @@ function getDistributionModeKeyboard() {
         ],
         [
           { text: 'Custom Amount', callback_data: 'dist_mode_custom' }
+        ],
+        [
+          { text: 'Back to Menu', callback_data: 'back_to_menu' }
+        ]
+      ]
+    }
+  };
+}
+
+function getBuyAmountKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: 'Default (Random Range)', callback_data: 'buy_amount_default' }
+        ],
+        [
+          { text: 'Set Custom Amount', callback_data: 'buy_amount_custom' }
         ],
         [
           { text: 'Back to Menu', callback_data: 'back_to_menu' }
@@ -633,7 +818,7 @@ function getMainMenuKeyboard(isPaid: boolean = false) {
         ],
         [
           { text: 'Distribution Mode', callback_data: 'distribution_mode' },
-          { text: 'Volume Calculator', callback_data: 'volume_calculator' }
+          { text: 'Set Buy Amount', callback_data: 'buy_amount_settings' }
         ],
         [
           { text: 'Start Volume', callback_data: 'start_volume' },
@@ -871,6 +1056,52 @@ async function handleDistributionMode(userId: number, chatId: number, messageId?
   } catch (error: any) {
     console.error('Distribution mode error:', error);
     safeSendMessage(chatId, 'Error displaying distribution mode.');
+  }
+}
+
+async function handleBuyAmountSettings(userId: number, chatId: number, messageId?: number) {
+  try {
+    const session = getUserSession(userId, chatId);
+
+    const currentMode = session.buyAmountConfig.mode;
+    const customAmount = session.buyAmountConfig.customAmount;
+
+    let modeDescription = '';
+    if (currentMode === 'default') {
+      modeDescription = `DEFAULT MODE (Active)\n` +
+        `Random: ${BUY_LOWER_AMOUNT} - ${BUY_UPPER_AMOUNT} SOL per buy\n` +
+        `Uses constants from config\n\n`;
+    } else {
+      modeDescription = `CUSTOM MODE (Active)\n` +
+        `Target: ${customAmount?.toFixed(4)} SOL per buy\n` +
+        `Actual: ${(customAmount! * 0.7).toFixed(4)} - ${(customAmount! * 1.3).toFixed(4)} SOL\n` +
+        `(±30% randomization)\n\n`;
+    }
+
+    const message =
+      `🎯 BUY AMOUNT SETTINGS\n\n` +
+      modeDescription +
+      `DEFAULT MODE:\n` +
+      `• Uses config values (${BUY_LOWER_AMOUNT}-${BUY_UPPER_AMOUNT} SOL)\n` +
+      `• Standard randomization\n` +
+      `• Good for testing\n\n` +
+      `CUSTOM MODE:\n` +
+      `• Set your preferred buy amount\n` +
+      `• Bot randomizes ±30% around your value\n` +
+      `• Example: 0.5 SOL → buys 0.35-0.65 SOL\n` +
+      `• More realistic trading patterns\n\n` +
+      `Select mode:`;
+
+    if (messageId && bot) {
+      bot.editMessageText(message, {
+        chat_id: chatId,
+        message_id: messageId,
+        ...getBuyAmountKeyboard()
+      });
+    }
+  } catch (error: any) {
+    console.error('Buy amount settings error:', error);
+    safeSendMessage(chatId, 'Error displaying buy amount settings.');
   }
 }
 
@@ -1168,19 +1399,14 @@ async function handleCheckBalance(userId: number, chatId: number, messageId?: nu
 
     if (!session.walletKeypair) {
       const message = 'No wallet found. Create one first!';
-
       if (messageId && bot) {
         bot.editMessageText(message, {
           chat_id: chatId,
           message_id: messageId,
           reply_markup: {
             inline_keyboard: [
-              [
-                { text: 'Create Wallet', callback_data: 'create_wallet' }
-              ],
-              [
-                { text: 'Back to Menu', callback_data: 'back_to_menu' }
-              ]
+              [{ text: 'Create Wallet', callback_data: 'create_wallet' }],
+              [{ text: 'Back to Menu', callback_data: 'back_to_menu' }]
             ]
           }
         });
@@ -1189,19 +1415,26 @@ async function handleCheckBalance(userId: number, chatId: number, messageId?: nu
     }
 
     const keypair = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
-    const balance = await solanaConnection.getBalance(keypair.publicKey);
-    const solBalance = balance / LAMPORTS_PER_SOL;
 
+    // OPTIMIZED: Use batch check if there are trading wallets
+    let solBalance = 0;
     let totalDistributed = 0;
+
     if (session.tradingWallets.length > 0) {
-      for (const wallet of session.tradingWallets) {
-        try {
-          const walletBalance = await solanaConnection.getBalance(new PublicKey(wallet.address));
-          totalDistributed += walletBalance / LAMPORTS_PER_SOL;
-        } catch (e) {
-          console.log(`Error fetching balance for wallet ${wallet.address}`);
-        }
-      }
+      const allWallets = [keypair, ...session.tradingWallets.map(w =>
+        Keypair.fromSecretKey(base58.decode(w.privateKey))
+      )];
+
+      // OPTIMIZED: Single batch call instead of N individual calls
+      const balances = await batchCheckBalances(allWallets);
+      solBalance = balances.get(keypair.publicKey.toBase58()) || 0;
+
+      session.tradingWallets.forEach(wallet => {
+        totalDistributed += balances.get(wallet.address) || 0;
+      });
+    } else {
+      // Single wallet, use cached balance
+      solBalance = await getCachedBalance(keypair.publicKey);
     }
 
     const totalBalance = solBalance + totalDistributed;
@@ -1227,19 +1460,15 @@ async function handleCheckBalance(userId: number, chatId: number, messageId?: nu
               { text: 'Refresh', callback_data: 'check_balance' },
               { text: 'Withdraw', callback_data: 'withdraw_sol' }
             ],
-            [
-              { text: 'Add Token', callback_data: 'add_token' }
-            ],
-            [
-              { text: 'Back to Menu', callback_data: 'back_to_menu' }
-            ]
+            [{ text: 'Add Token', callback_data: 'add_token' }],
+            [{ text: 'Back to Menu', callback_data: 'back_to_menu' }]
           ]
         }
       });
     }
   } catch (error: any) {
     console.error('Balance check error:', error);
-    safeSendMessage(chatId, 'Error checking balance. Please try again.');
+    safeSendMessage(chatId, 'Error checking balance. Try again.');
   }
 }
 
@@ -1372,6 +1601,11 @@ async function handleStartVolume(userId: number, chatId: number, messageId?: num
     const totalToDistribute = amountPerWallet * walletCount;
     const remaining = solBalance - totalToDistribute;
 
+    // Show current buy amount mode
+    const buyModeInfo = session.buyAmountConfig.mode === 'custom' && session.buyAmountConfig.customAmount
+      ? `Buy Amount: ${session.buyAmountConfig.customAmount.toFixed(4)} SOL (±30%)\n`
+      : `Buy Amount: ${BUY_LOWER_AMOUNT}-${BUY_UPPER_AMOUNT} SOL (Random)\n`;
+
     const message =
       `Volume Generation Started!\n\n` +
       `Token: ${session.tokenName}\n` +
@@ -1381,8 +1615,9 @@ async function handleStartVolume(userId: number, chatId: number, messageId?: num
       `Per Wallet: ${amountPerWallet.toFixed(4)} SOL\n` +
       `Total Distributed: ${totalToDistribute.toFixed(4)} SOL\n` +
       `Remaining in Main: ${remaining.toFixed(4)} SOL\n` +
-      `Trading Wallets: ${walletCount}\n\n` +
-      `Distributing SOL to ${walletCount} wallets...\n` +
+      `Trading Wallets: ${walletCount}\n` +
+      buyModeInfo +                                                    // ADD THIS LINE
+      `\nDistributing SOL to ${walletCount} wallets...\n` +
       `You'll receive live trading updates!\n\n` +
       `Status: ACTIVE`;
 
@@ -1464,7 +1699,12 @@ function handleStopVolume(userId: number, chatId: number, messageId?: number) {
   }
 }
 
-async function distributeSol(mainKp: Keypair, distributionNum: number, amountPerWallet: number, session: UserSession): Promise<{ kp: Keypair, address: string, privateKey: string }[]> {
+async function distributeSol(
+  mainKp: Keypair,
+  distributionNum: number,
+  amountPerWallet: number,
+  session: UserSession
+): Promise<{ kp: Keypair, address: string, privateKey: string }[]> {
   try {
     const wallets: { kp: Keypair, address: string, privateKey: string }[] = [];
     const sendSolTx: TransactionInstruction[] = [];
@@ -1493,7 +1733,7 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
     }
 
     const siTx = new Transaction().add(...sendSolTx);
-    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed'); // OPTIMIZED: Use 'confirmed'
     siTx.feePayer = mainKp.publicKey;
     siTx.recentBlockhash = latestBlockhash.blockhash;
 
@@ -1511,16 +1751,14 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
     if (txSig) {
       console.log("SOL distributed successfully:", txSig);
 
-      // Archive old trading wallets to history
+      // Archive old trading wallets
       if (session.tradingWallets && session.tradingWallets.length > 0) {
         if (!session.tradingWalletsHistory) {
           session.tradingWalletsHistory = [];
         }
         session.tradingWalletsHistory.push([...session.tradingWallets]);
-        console.log(`Archived ${session.tradingWallets.length} old trading wallets to history for user ${session.userId}`);
       }
 
-      // Set new trading wallets as current
       session.tradingWallets = wallets.map(w => ({
         address: w.address,
         privateKey: w.privateKey
@@ -1528,43 +1766,23 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
 
       saveAfterCriticalOperation(session);
 
-      // CRITICAL: Wait for balances to be confirmed on-chain
-      console.log("Waiting for distribution to be confirmed on-chain...");
-      await sleep(5000); // Wait 5 seconds for blockchain confirmation
+      // OPTIMIZED: Reduced wait time from 5s to 3s
+      console.log("Waiting for distribution confirmation...");
+      await sleep(3000);
 
-      // Verify each wallet received the funds
+      // OPTIMIZED: Use batch check instead of individual wallet checks
+      const balances = await batchCheckBalances(wallets.map(w => w.kp));
       let allWalletsVerified = true;
-      for (let i = 0; i < wallets.length; i++) {
-        const wallet = wallets[i];
-        let attempts = 0;
-        let verified = false;
 
-        while (attempts < 10 && !verified) {
-          try {
-            const balance = await solanaConnection.getBalance(new PublicKey(wallet.address));
-            const solBalance = balance / LAMPORTS_PER_SOL;
-
-            if (solBalance >= amountPerWallet * 0.95) { // Allow 5% margin for fees
-              console.log(`Wallet ${i + 1} verified: ${solBalance.toFixed(6)} SOL`);
-              verified = true;
-              break;
-            }
-
-            console.log(`Wallet ${i + 1} balance not ready yet: ${solBalance.toFixed(6)} SOL, waiting...`);
-            await sleep(2000);
-            attempts++;
-          } catch (error) {
-            console.log(`Error checking wallet ${i + 1} balance, attempt ${attempts + 1}/10`);
-            await sleep(2000);
-            attempts++;
-          }
-        }
-
-        if (!verified) {
-          console.log(`Warning: Wallet ${i + 1} balance could not be verified after 10 attempts`);
+      wallets.forEach((wallet, i) => {
+        const balance = balances.get(wallet.address) || 0;
+        if (balance >= amountPerWallet * 0.95) {
+          console.log(`Wallet ${i + 1} verified: ${balance.toFixed(6)} SOL`);
+        } else {
+          console.log(`Wallet ${i + 1} not verified: ${balance.toFixed(6)} SOL`);
           allWalletsVerified = false;
         }
-      }
+      });
 
       let walletList = '';
       wallets.forEach((wallet, i) => {
@@ -1578,8 +1796,7 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
         `Total distributed: ${(amountPerWallet * distributionNum).toFixed(4)} SOL\n` +
         `Transaction: https://solscan.io/tx/${txSig}\n\n` +
         `${allWalletsVerified ? '✅ All wallets verified!' : '⚠️ Some wallets still confirming...'}\n` +
-        `Starting volume generation...\n` +
-        `Live trading alerts incoming!`;
+        `Starting volume generation...`;
 
       safeSendMessage(session.chatId, message);
 
@@ -1590,8 +1807,7 @@ async function distributeSol(mainKp: Keypair, distributionNum: number, amountPer
 
   } catch (error: any) {
     console.error("Failed to distribute SOL:", error);
-    const errorMessage = error?.message || 'Unknown error';
-    safeSendMessage(session.chatId, `Failed to distribute SOL: ${errorMessage}`, getMainMenuKeyboard(true));
+    safeSendMessage(session.chatId, `Failed to distribute SOL: ${error?.message || 'Unknown error'}`, getMainMenuKeyboard(true));
     return [];
   }
 }
@@ -1734,7 +1950,7 @@ async function refuelWalletFromMain(
   shortWallet: string
 ): Promise<boolean> {
   try {
-    const mainBalance = await solanaConnection.getBalance(mainKp.publicKey);
+    const mainBalance = await solanaConnection.getBalance(mainKp.publicKey, 'confirmed');
     const mainSolBalance = mainBalance / LAMPORTS_PER_SOL;
 
     // Amount needed for swap fees (enough for several swaps)
@@ -1776,7 +1992,7 @@ async function refuelWalletFromMain(
       })
     );
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = mainKp.publicKey;
 
@@ -1833,44 +2049,55 @@ async function performBuy(
   shortWallet: string
 ): Promise<boolean> {
   try {
-    const walletBalance = await solanaConnection.getBalance(wallet.publicKey);
-    const solBalance = walletBalance / LAMPORTS_PER_SOL;
+    // OPTIMIZED: Use cached balance instead of fresh RPC call
+    const solBalance = await getCachedBalance(wallet.publicKey);
 
-    const buyAmount = IS_RANDOM
-      ? Number((Math.random() * (BUY_UPPER_AMOUNT - BUY_LOWER_AMOUNT) + BUY_LOWER_AMOUNT).toFixed(6))
-      : BUY_AMOUNT;
+    // Calculate buy amount based on user's config
+    let buyAmount: number;
+
+    if (session.buyAmountConfig.mode === 'custom' && session.buyAmountConfig.customAmount) {
+      // Custom mode: randomize ±30% around user's preferred amount
+      const baseAmount = session.buyAmountConfig.customAmount;
+      const minMultiplier = 0.7; // 30% below
+      const maxMultiplier = 1.3; // 30% above
+      const randomMultiplier = minMultiplier + Math.random() * (maxMultiplier - minMultiplier);
+      buyAmount = Number((baseAmount * randomMultiplier).toFixed(6));
+
+      console.log(`Custom buy mode: Base ${baseAmount}, Multiplier ${randomMultiplier.toFixed(2)}, Final ${buyAmount}`);
+    } else {
+      // Default mode: use constants
+      buyAmount = IS_RANDOM
+        ? Number((Math.random() * (BUY_UPPER_AMOUNT - BUY_LOWER_AMOUNT) + BUY_LOWER_AMOUNT).toFixed(6))
+        : BUY_AMOUNT;
+    }
 
     const minimumRequired = buyAmount + ADDITIONAL_FEE;
 
-    // Check if insufficient SOL for buying
     if (solBalance < minimumRequired) {
-      console.log(`Wallet ${walletNumber} insufficient balance: ${solBalance.toFixed(6)} SOL, needs ${minimumRequired.toFixed(6)} SOL`);
+      console.log(`Wallet ${walletNumber} insufficient balance: ${solBalance.toFixed(6)} SOL`);
 
-      safeSendMessage(session.chatId,
-        `⚠️ INSUFFICIENT SOL FOR TRADING\n\n` +
-        `Wallet ${walletNumber} (${shortWallet})\n` +
-        `Current: ${solBalance.toFixed(6)} SOL\n` +
-        `Needed: ${minimumRequired.toFixed(6)} SOL\n\n` +
-        `This wallet has run out of SOL for trading.\n` +
-        `Consider stopping and withdrawing remaining funds.`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Stop Volume', callback_data: 'stop_volume' }],
-              [{ text: 'Withdraw All', callback_data: 'withdraw_sol' }]
-            ]
+      // OPTIMIZED: Only notify every 10 failures to reduce spam
+      if (session.tradingStats.failedTxs % 10 === 0) {
+        safeSendMessage(session.chatId,
+          `⚠️ Wallet ${walletNumber} low on SOL: ${solBalance.toFixed(6)} SOL\n` +
+          `Consider stopping and withdrawing.`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Stop Volume', callback_data: 'stop_volume' }]
+              ]
+            }
           }
-        }
-      );
-
+        );
+      }
       return false;
     }
 
-    console.log(`Attempting buy: Wallet ${walletNumber}, Amount: ${buyAmount} SOL, Balance: ${solBalance} SOL`);
+    console.log(`Buy attempt: Wallet ${walletNumber}, Amount: ${buyAmount} SOL`);
 
     let tx;
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 2; // OPTIMIZED: Reduced from 3
 
     while (attempts < maxAttempts) {
       try {
@@ -1882,42 +2109,35 @@ async function performBuy(
           throw new Error('No pool ID available');
         }
 
-        if (tx) {
-          console.log(`Transaction created successfully on attempt ${attempts + 1}`);
-          break;
-        }
+        if (tx) break;
 
         attempts++;
-        if (attempts < maxAttempts) {
-          await sleep(2000);
-        }
+        if (attempts < maxAttempts) await sleep(1000); // OPTIMIZED: Reduced from 2000
+
       } catch (txError: any) {
         attempts++;
-        console.error(`Transaction creation attempt ${attempts} failed:`, txError?.message);
-
-        if (attempts < maxAttempts) {
-          await sleep(2000);
-        } else {
-          throw txError;
-        }
+        console.error(`TX creation attempt ${attempts} failed:`, txError?.message);
+        if (attempts < maxAttempts) await sleep(1000);
+        else throw txError;
       }
     }
 
     if (!tx) {
-      console.log(`Failed to create buy transaction after ${maxAttempts} attempts`);
       session.tradingStats.failedTxs++;
       saveSessions();
 
-      sendTradingNotification(session, 'error', {
-        type: 'BUY',
-        wallet: shortWallet,
-        error: 'Transaction creation failed'
-      });
-
+      // OPTIMIZED: Throttle error notifications
+      if (session.tradingStats.failedTxs % 5 === 0) {
+        sendTradingNotification(session, 'error', {
+          type: 'BUY',
+          wallet: shortWallet,
+          error: 'Transaction creation failed'
+        });
+      }
       return false;
     }
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed'); // OPTIMIZED: Use 'confirmed'
     const txSig = await execute(tx, latestBlockhash);
 
     if (txSig) {
@@ -1925,46 +2145,40 @@ async function performBuy(
       session.tradingStats.totalVolumeSOL += buyAmount;
       session.tradingStats.successfulTxs++;
       session.tradingStats.lastActivity = Date.now();
+
+      // OPTIMIZED: Invalidate balance cache after successful buy
+      const walletKey = wallet.publicKey.toBase58();
+      const cached = walletCacheMap.get(walletKey);
+      if (cached) {
+        cached.lastBalanceCheck = 0; // Force refresh on next check
+      }
+
       userSessions.set(session.userId, session);
       saveSessions();
 
-      console.log(`Buy successful - User: ${session.userId}, Wallet: ${walletNumber}, Amount: ${buyAmount} SOL, TX: ${txSig}`);
+      console.log(`Buy success - Wallet: ${walletNumber}, Amount: ${buyAmount} SOL, TX: ${txSig}`);
 
-      sendTradingNotification(session, 'buy', {
-        success: true,
-        amount: buyAmount.toFixed(6),
-        wallet: shortWallet,
-        signature: txSig
-      });
+      // OPTIMIZED: Only send notification every 3rd buy to reduce Telegram spam
+      if (session.tradingStats.totalBuys % 3 === 0) {
+        sendTradingNotification(session, 'buy', {
+          success: true,
+          amount: buyAmount.toFixed(6),
+          wallet: shortWallet,
+          signature: txSig
+        });
+      }
 
       return true;
     } else {
       session.tradingStats.failedTxs++;
       saveSessions();
-
-      sendTradingNotification(session, 'error', {
-        type: 'BUY',
-        wallet: shortWallet,
-        error: 'Transaction execution failed'
-      });
-
       return false;
     }
 
   } catch (error: any) {
-    console.error(`Buy error for user ${session.userId}, wallet ${walletNumber}:`, error);
+    console.error(`Buy error wallet ${walletNumber}:`, error);
     session.tradingStats.failedTxs++;
     saveSessions();
-
-    const errorMessage = error?.message || 'Unknown error';
-    const shortError = errorMessage.length > 50 ? errorMessage.substring(0, 50) + '...' : errorMessage;
-
-    sendTradingNotification(session, 'error', {
-      type: 'BUY',
-      wallet: shortWallet,
-      error: shortError
-    });
-
     return false;
   }
 }
@@ -1978,61 +2192,40 @@ async function performSell(
   shortWallet: string
 ): Promise<boolean> {
   try {
-    // Check SOL balance before attempting sell
-    const walletBalance = await solanaConnection.getBalance(wallet.publicKey);
-    const solBalance = walletBalance / LAMPORTS_PER_SOL;
+    // OPTIMIZED: Use cached balance check
+    const solBalance = await getCachedBalance(wallet.publicKey);
 
-    // Need at least ADDITIONAL_FEE for swap fees
     if (solBalance < ADDITIONAL_FEE) {
-      console.log(`Wallet ${walletNumber} needs refuel for swap. Balance: ${solBalance.toFixed(6)} SOL`);
+      console.log(`Wallet ${walletNumber} needs refuel: ${solBalance.toFixed(6)} SOL`);
 
-      // Get main wallet keypair
-      if (!session.walletKeypair) {
-        console.log(`Cannot refuel - main wallet not found`);
-        return false;
-      }
+      if (!session.walletKeypair) return false;
 
       const mainKp = Keypair.fromSecretKey(base58.decode(session.walletKeypair));
-
-      // Auto-refuel from main wallet
       const refueled = await refuelWalletFromMain(mainKp, wallet, session, walletNumber, shortWallet);
 
-      if (!refueled) {
-        console.log(`Failed to refuel wallet ${walletNumber}`);
-        return false;
-      }
+      if (!refueled) return false;
 
-      // Recheck balance after refuel
-      const newBalance = await solanaConnection.getBalance(wallet.publicKey);
-      const newSolBalance = newBalance / LAMPORTS_PER_SOL;
-
-      if (newSolBalance < ADDITIONAL_FEE) {
-        console.log(`Refuel completed but still insufficient: ${newSolBalance.toFixed(6)} SOL`);
-        return false;
-      }
-
-      console.log(`Wallet ${walletNumber} refueled successfully. New balance: ${newSolBalance.toFixed(6)} SOL`);
+      // Force balance refresh after refuel
+      await getCachedBalance(wallet.publicKey, true);
     }
 
-    // Find actual token account that holds this token
-    const accounts = await solanaConnection.getTokenAccountsByOwner(wallet.publicKey, { mint: baseMint });
+    // OPTIMIZED: Use cached token account lookup instead of fresh fetch
+    const tokenAccount = await getCachedTokenAccount(wallet.publicKey, baseMint);
 
-    if (accounts.value.length === 0) {
-      console.log(`No token account found for wallet ${walletNumber}`);
+    if (!tokenAccount) {
+      console.log(`No token account for wallet ${walletNumber}`);
       return false;
     }
 
-    // Use the first token account found
-    const tokenAccount = accounts.value[0].pubkey;
-
-    // Wait for balance to appear
+    // OPTIMIZED: Reduced retry attempts from 10 to 5
     let tokenBalance = '0';
     let tokenAmount = 0;
     let attempts = 0;
+    const maxAttempts = 5;
 
-    while (attempts < 10) {
+    while (attempts < maxAttempts) {
       try {
-        const tokenBalInfo = await solanaConnection.getTokenAccountBalance(tokenAccount);
+        const tokenBalInfo = await solanaConnection.getTokenAccountBalance(tokenAccount, 'confirmed'); // OPTIMIZED: 'confirmed'
         tokenBalance = tokenBalInfo.value.amount;
         tokenAmount = tokenBalInfo.value.uiAmount || 0;
 
@@ -2041,11 +2234,11 @@ async function performSell(
           break;
         }
       } catch (error) {
-        // Account might not be ready yet
+        // Account not ready yet
       }
 
-      console.log(`Waiting for token balance... wallet ${walletNumber} (${attempts + 1}/10)`);
-      await sleep(2000);
+      console.log(`Waiting for tokens... wallet ${walletNumber} (${attempts + 1}/${maxAttempts})`);
+      await sleep(1500); // OPTIMIZED: Reduced from 2000
       attempts++;
     }
 
@@ -2054,13 +2247,13 @@ async function performSell(
       return false;
     }
 
-    console.log(`Attempting sell: Wallet ${walletNumber}, Amount: ${tokenAmount} tokens`);
+    console.log(`Sell attempt: Wallet ${walletNumber}, Amount: ${tokenAmount} tokens`);
 
     let sellTx;
     let txAttempts = 0;
-    const maxAttempts = 3;
+    const maxTxAttempts = 2; // OPTIMIZED: Reduced from 3
 
-    while (txAttempts < maxAttempts) {
+    while (txAttempts < maxTxAttempts) {
       try {
         if (SWAP_ROUTING) {
           sellTx = await getSellTxWithJupiter(wallet, baseMint, tokenBalance);
@@ -2070,88 +2263,76 @@ async function performSell(
           throw new Error('No pool ID available');
         }
 
-        if (sellTx) {
-          console.log(`Sell transaction created successfully on attempt ${txAttempts + 1}`);
-          break;
-        }
+        if (sellTx) break;
 
         txAttempts++;
-        if (txAttempts < maxAttempts) {
-          await sleep(2000);
-        }
+        if (txAttempts < maxTxAttempts) await sleep(1000); // OPTIMIZED: Reduced delay
+
       } catch (txError: any) {
         txAttempts++;
-        console.error(`Sell transaction creation attempt ${txAttempts} failed:`, txError?.message);
-
-        if (txAttempts < maxAttempts) {
-          await sleep(2000);
-        } else {
-          throw txError;
-        }
+        console.error(`Sell TX attempt ${txAttempts} failed:`, txError?.message);
+        if (txAttempts < maxTxAttempts) await sleep(1000);
+        else throw txError;
       }
     }
 
     if (!sellTx) {
-      console.log(`Failed to create sell transaction after ${maxAttempts} attempts`);
       session.tradingStats.failedTxs++;
       saveSessions();
 
-      sendTradingNotification(session, 'error', {
-        type: 'SELL',
-        wallet: shortWallet,
-        error: 'Transaction creation failed'
-      });
-
+      // OPTIMIZED: Throttle error notifications
+      if (session.tradingStats.failedTxs % 5 === 0) {
+        sendTradingNotification(session, 'error', {
+          type: 'SELL',
+          wallet: shortWallet,
+          error: 'Transaction creation failed'
+        });
+      }
       return false;
     }
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash();
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed'); // OPTIMIZED: Use 'confirmed'
     const txSig = await execute(sellTx, latestBlockhash, false);
 
     if (txSig) {
       session.tradingStats.totalSells++;
       session.tradingStats.successfulTxs++;
       session.tradingStats.lastActivity = Date.now();
+
+      // OPTIMIZED: Invalidate caches after successful sell
+      const walletKey = wallet.publicKey.toBase58();
+      const cached = walletCacheMap.get(walletKey);
+      if (cached) {
+        cached.lastBalanceCheck = 0;
+        cached.tokenAccounts.delete(baseMint.toBase58());
+      }
+
       userSessions.set(session.userId, session);
       saveSessions();
 
-      console.log(`Sell successful - User: ${session.userId}, Wallet: ${walletNumber}, Amount: ${tokenAmount} ${session.tokenSymbol}, TX: ${txSig}`);
+      console.log(`Sell success - Wallet: ${walletNumber}, TX: ${txSig}`);
 
-      sendTradingNotification(session, 'sell', {
-        success: true,
-        tokenAmount: tokenAmount.toFixed(6),
-        wallet: shortWallet,
-        signature: txSig
-      });
+      // OPTIMIZED: Only send notification every 3rd sell
+      if (session.tradingStats.totalSells % 3 === 0) {
+        sendTradingNotification(session, 'sell', {
+          success: true,
+          tokenAmount: tokenAmount.toFixed(6),
+          wallet: shortWallet,
+          signature: txSig
+        });
+      }
 
       return true;
     } else {
       session.tradingStats.failedTxs++;
       saveSessions();
-
-      sendTradingNotification(session, 'error', {
-        type: 'SELL',
-        wallet: shortWallet,
-        error: 'Transaction execution failed'
-      });
-
       return false;
     }
 
   } catch (error: any) {
-    console.error(`Sell error for user ${session.userId}, wallet ${walletNumber}:`, error);
+    console.error(`Sell error wallet ${walletNumber}:`, error);
     session.tradingStats.failedTxs++;
     saveSessions();
-
-    const errorMessage = error?.message || 'Unknown error';
-    const shortError = errorMessage.length > 50 ? errorMessage.substring(0, 50) + '...' : errorMessage;
-
-    sendTradingNotification(session, 'error', {
-      type: 'SELL',
-      wallet: shortWallet,
-      error: shortError
-    });
-
     return false;
   }
 }
@@ -2458,8 +2639,59 @@ if (BOT_TOKEN) {
         );
         break;
 
-      case 'volume_calculator':
-        handleVolumeCalculator(userId, chatId, msg?.message_id);
+      case 'buy_amount_settings':
+        handleBuyAmountSettings(userId, chatId, msg?.message_id);
+        break;
+
+      case 'buy_amount_default':
+        session.buyAmountConfig = { mode: 'default' };
+        userSessions.set(userId, session);
+        saveSessions();
+
+        bot.editMessageText(
+          `✅ Buy Amount Mode: DEFAULT\n\n` +
+          `Using config values:\n` +
+          `Range: ${BUY_LOWER_AMOUNT} - ${BUY_UPPER_AMOUNT} SOL\n\n` +
+          `Each buy will randomly select an amount\n` +
+          `within this range.`,
+          {
+            chat_id: chatId,
+            message_id: msg?.message_id,
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Change to Custom', callback_data: 'buy_amount_custom' }],
+                [{ text: 'Back to Menu', callback_data: 'back_to_menu' }]
+              ]
+            }
+          }
+        );
+        break;
+
+      case 'buy_amount_custom':
+        session.status = 'awaiting_buy_amount';
+        userSessions.set(userId, session);
+        saveSessions();
+
+        bot.editMessageText(
+          `🎯 Set Custom Buy Amount\n\n` +
+          `Enter your preferred buy amount in SOL.\n\n` +
+          `Examples:\n` +
+          `• 0.1 → Bot buys 0.07-0.13 SOL\n` +
+          `• 0.5 → Bot buys 0.35-0.65 SOL\n` +
+          `• 1.0 → Bot buys 0.70-1.30 SOL\n\n` +
+          `The bot will randomize ±30% around\n` +
+          `your value for realistic patterns.\n\n` +
+          `Send the amount as a message:`,
+          {
+            chat_id: chatId,
+            message_id: msg?.message_id,
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Cancel', callback_data: 'buy_amount_settings' }]
+              ]
+            }
+          }
+        );
         break;
 
       case 'create_wallet':
@@ -2630,6 +2862,52 @@ if (BOT_TOKEN) {
         `Selected wallets: ${session.selectedWalletCount}\n` +
         `Total to distribute: ${(amount * session.selectedWalletCount).toFixed(4)} SOL\n\n` +
         `Use Volume Calculator to see estimates.`,
+        getMainMenuKeyboard(true)
+      );
+      return;
+    }
+
+    // Handle custom buy amount input
+    if (session.status === 'awaiting_buy_amount') {
+      const amount = parseFloat(trimmedText);
+
+      if (isNaN(amount) || amount <= 0) {
+        safeSendMessage(chatId, 'Invalid amount. Please enter a valid number (e.g., 0.5)');
+        return;
+      }
+
+      const minAmount = 0.001; // Minimum 0.001 SOL
+      const maxAmount = 10; // Maximum 10 SOL per buy
+
+      if (amount < minAmount) {
+        safeSendMessage(chatId, `Amount too low. Minimum: ${minAmount} SOL`);
+        return;
+      }
+
+      if (amount > maxAmount) {
+        safeSendMessage(chatId, `Amount too high. Maximum: ${maxAmount} SOL per buy`);
+        return;
+      }
+
+      session.buyAmountConfig = {
+        mode: 'custom',
+        customAmount: amount
+      };
+      session.status = 'idle';
+      userSessions.set(userId, session);
+      saveSessions();
+
+      const minBuy = (amount * 0.7).toFixed(4);
+      const maxBuy = (amount * 1.3).toFixed(4);
+
+      safeSendMessage(chatId,
+        `✅ Custom Buy Amount Set!\n\n` +
+        `Target Amount: ${amount.toFixed(4)} SOL\n` +
+        `Actual Range: ${minBuy}-${maxBuy} SOL\n` +
+        `Randomization: ±30%\n\n` +
+        `Each buy will vary within this range\n` +
+        `for more realistic trading patterns.\n\n` +
+        `You can change this anytime!`,
         getMainMenuKeyboard(true)
       );
       return;
