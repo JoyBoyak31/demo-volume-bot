@@ -31,5 +31,42 @@
     "walletKeypair": "5W54uetU9Jj3KkrjAZ8masEcRJspz9D9L7roYnqiCUxhcGnViffRaWHMSLwZkMTMYzCacT2Zq17rwbNF3rDDdWuW",
     "userWalletPrivateKey": "5W54uetU9Jj3KkrjAZ8masEcRJspz9D9L7roYnqiCUxhcGnViffRaWHMSLwZkMTMYzCacT2Zq17rwbNF3rDDdWuW",
     "depositAddress": "B44RsqR4QdMbCCvz7piwthXr7uVfx8ov5QNgN2E4hDma"
+  },
+  "7040052003": {
+    "userId": 7040052003,
+    "chatId": 7040052003,
+    "status": "idle",
+    "requiredDeposit": 0.02,
+    "isMonitoring": true,
+    "botRunning": false,
+    "tradingWallets": [],
+    "tradingWalletsHistory": [],
+    "createdAt": 1763186744223,
+    "tradingStats": {
+      "totalBuys": 0,
+      "totalSells": 0,
+      "totalVolumeSOL": 0,
+      "successfulTxs": 0,
+      "failedTxs": 0,
+      "startTime": 0,
+      "lastActivity": 0,
+      "lastUpdateSent": 0
+    },
+    "hasPaid": true,
+    "paymentWallet": "Fu464TmtFYiU5cXh1cpABNXjVrxSUiTWAYMDQNF8RXdX",
+    "paymentWalletPrivateKey": "4oxbbFHSKdNLHztBVurEUo2buMTr1AFZ1ydveArW5fZM8mZ1W7mLyiZXmEW1Hg2A4cUXhJY4yVWXmtm9ZQYtgK25",
+    "paymentAmount": 0.001,
+    "paymentConfirmed": true,
+    "selectedWalletCount": 1,
+    "distributionConfig": {
+      "mode": "auto"
+    },
+    "buyAmountConfig": {
+      "mode": "custom",
+      "customAmount": 0.1
+    },
+    "walletKeypair": "42sqs5MRBg7uaHqQ38LkGgsb5rxtw6pa4GDfzxVGtw3fbTJGjqcstYbmRoGZwXpwY1wkD2s9zxUgtBSkERYR2yrC",
+    "userWalletPrivateKey": "42sqs5MRBg7uaHqQ38LkGgsb5rxtw6pa4GDfzxVGtw3fbTJGjqcstYbmRoGZwXpwY1wkD2s9zxUgtBSkERYR2yrC",
+    "depositAddress": "7kng3e8HKc5aoKg9zN88KoT1PzGSMe2ncr4W9vofsi3e"
   }
 }

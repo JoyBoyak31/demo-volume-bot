@@ -1,3 +1,5 @@
+// Main index.ts file to manage tg
+
 import TelegramBot from 'node-telegram-bot-api';
 import {
   NATIVE_MINT,
@@ -37,6 +39,8 @@ import { execute } from './executor/legacy'
 import { getPoolKeys } from './utils/getPoolInfo'
 import * as fs from 'fs'
 import * as path from 'path'
+import { jupiterQueue } from './utils/requestQueue';
+import { quoteCache } from './utils/quoteCache';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 let bot: TelegramBot | null = null;
@@ -112,13 +116,415 @@ interface WalletCache {
   balance: number;
 }
 
+// Sell queue for cooldown recovery
+interface WalletWithTokens {
+  wallet: Keypair;
+  walletNumber: number;
+  shortWallet: string;
+  tokenAmount: number;
+  tokenBalance: string;
+}
+
+let sellQueue: WalletWithTokens[] = [];
+let isSellQueueProcessing = false;
+
+// Adaptive rate limiting
+let consecutiveSuccesses = 0;
+let recentFailureRate = 0;
+let lastAdaptiveCheck = Date.now();
+const ADAPTIVE_CHECK_INTERVAL = 60000; // Check every 60 seconds
+
 const userSessions = new Map<number, UserSession>();
 const SESSION_FILE = './user_sessions.json';
 const SESSIONS_DIR = './user_sessions';
 const activeTraders = new Set<number>();
+// Cooldown system state
+let COOLDOWN_MODE = false;
+let cooldownStartTime = 0;
+let rateLimitFailureCount = 0;
+let lastFailureTime = 0;
+const RATE_LIMIT_THRESHOLD = 2;
+const FAILURE_WINDOW = 10000; // Within 10 seconds
+const COOLDOWN_DURATION = 60000;
+const COOLDOWN_TEST_DURATION = 30000; // 30 seconds after sells before testing
 const walletCacheMap = new Map<string, WalletCache>();
 const TOKEN_ACCOUNT_CACHE_TTL = 60000; // 1 minute cache
 const BALANCE_CACHE_TTL = 15000; // 15 seconds cache
+
+// ==================== COOLDOWN SYSTEM FUNCTIONS ====================
+
+function recordRateLimitFailure() {
+  const now = Date.now();
+
+  // Reset counter if last failure was too long ago
+  if (now - lastFailureTime > FAILURE_WINDOW) {
+    rateLimitFailureCount = 0;
+  }
+
+  rateLimitFailureCount++;
+  lastFailureTime = now;
+
+  console.log(`⚠️ Rate limit failure ${rateLimitFailureCount}/${RATE_LIMIT_THRESHOLD}`);
+
+  if (rateLimitFailureCount >= RATE_LIMIT_THRESHOLD && !COOLDOWN_MODE) {
+    triggerCooldown();
+  }
+}
+
+function recordSuccess() {
+  consecutiveSuccesses++;
+
+  // Every 10 successes, check if we can speed up
+  if (consecutiveSuccesses >= 10 && Date.now() - lastAdaptiveCheck > ADAPTIVE_CHECK_INTERVAL) {
+    const currentRate = 3; // Default rate
+
+    if (recentFailureRate < 0.05) { // Less than 5% failure rate
+      // Speed up slightly
+      jupiterQueue.setRequestsPerSecond(Math.min(currentRate + 0.5, 5));
+      console.log('📈 Adaptive: Increasing request rate (low failure rate)');
+    }
+
+    consecutiveSuccesses = 0;
+    lastAdaptiveCheck = Date.now();
+  }
+}
+
+function recordFailure() {
+  consecutiveSuccesses = 0;
+
+  // Slow down on failures
+  if (Date.now() - lastAdaptiveCheck > ADAPTIVE_CHECK_INTERVAL) {
+    const currentRate = 3; // default
+    jupiterQueue.setRequestsPerSecond(Math.max(currentRate - 0.5, 1));
+    console.log('📉 Adaptive: Decreasing request rate (failures detected)');
+
+    lastAdaptiveCheck = Date.now();
+  }
+}
+
+function triggerCooldown() {
+  COOLDOWN_MODE = true;
+  cooldownStartTime = Date.now();
+  rateLimitFailureCount = 0;
+
+  console.log('🛑 COOLDOWN MODE ACTIVATED - Pausing all new buys');
+  console.log(`⏰ Cooldown duration: ${COOLDOWN_DURATION / 1000} seconds`);
+
+  // Notify all active users
+  activeTraders.forEach(userId => {
+    const session = userSessions.get(userId);
+    if (session && bot) {
+      safeSendMessage(session.chatId,
+        `⚠️ RATE LIMIT DETECTED\n\n` +
+        `Bot entering cooldown mode:\n` +
+        `• All new buys paused\n` +
+        `• Selling existing tokens\n` +
+        `• Will resume in ~${(COOLDOWN_DURATION / 1000) + 60} seconds\n\n` +
+        `This protects your funds from errors.`
+      );
+    }
+  });
+}
+
+async function testResumptionWithOneWallet(
+  tradingWallets: { kp: Keypair; address: string; privateKey: string }[],
+  baseMint: PublicKey,
+  poolId: PublicKey | undefined,
+  session: UserSession
+): Promise<boolean> {
+  if (tradingWallets.length === 0) return false;
+
+  const testWallet = tradingWallets[0].kp;
+  const walletAddress = testWallet.publicKey.toBase58();
+  const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4);
+
+  console.log(`Testing with wallet: ${shortWallet}`);
+
+  try {
+    // Try a small buy
+    const testAmount = BUY_LOWER_AMOUNT; // Use minimum amount
+    const buyResult = await performBuy(testWallet, baseMint, poolId, session, 1, shortWallet);
+
+    if (!buyResult) {
+      console.log('Test buy failed');
+      return false;
+    }
+
+    console.log('✅ Test buy successful');
+    await sleep(3000);
+
+    // Try to sell what we just bought
+    const sellResult = await performSell(testWallet, baseMint, poolId, session, 1, shortWallet);
+
+    if (!sellResult) {
+      console.log('⚠️ Test sell failed - but buy worked, continuing anyway');
+      return true; // Buy working is enough
+    }
+
+    console.log('✅ Test sell successful');
+    return true;
+
+  } catch (error: any) {
+    console.error('Test resumption error:', error?.message);
+    return false;
+  }
+}
+
+async function checkAndExitCooldown(
+  tradingWallets: { kp: Keypair; address: string; privateKey: string }[],
+  baseMint: PublicKey,
+  poolId: PublicKey | undefined,
+  session: UserSession
+): Promise<boolean> {
+  if (!COOLDOWN_MODE) return true;
+  
+  const cooldownElapsed = Date.now() - cooldownStartTime;
+  
+  if (cooldownElapsed < COOLDOWN_DURATION) {
+    const remaining = Math.ceil((COOLDOWN_DURATION - cooldownElapsed) / 1000);
+    console.log(`⏳ Still in cooldown: ${remaining}s remaining`);
+    return false;
+  }
+  
+  console.log('✅ Cooldown period complete, verifying rate limit has cooled...');
+  
+  // Wait an additional test period
+  await sleep(5000);
+  
+  // Test if rate limit is actually cooled down
+  const rateLimitTestPassed = await testRateLimitRecovery();
+  
+  if (!rateLimitTestPassed) {
+    console.log('❌ Rate limit still active, extending cooldown by 60s');
+    cooldownStartTime = Date.now(); // Reset cooldown timer
+    return false;
+  }
+  
+  console.log('✅ Rate limit cooled - starting sell queue process');
+  
+  // Build sell queue
+  await buildSellQueue(tradingWallets, baseMint, session);
+  
+  // Process all sells
+  if (sellQueue.length > 0) {
+    await processSellQueue(baseMint, poolId, session);
+  }
+  
+  // Final wait before resuming
+  console.log('⏳ Waiting 30s before resuming normal trading...');
+  await sleep(30000);
+  
+  // Smart resumption test - try 1 wallet first
+  console.log('🧪 Testing resumption with 1 wallet...');
+  const resumptionTestPassed = await testResumptionWithOneWallet(tradingWallets, baseMint, poolId, session);
+  
+  if (!resumptionTestPassed) {
+    console.log('❌ Resumption test failed - extending cooldown');
+    cooldownStartTime = Date.now();
+    return false;
+  }
+  
+  console.log('✅ Resumption test passed - safe to resume all wallets');
+  
+  // Exit cooldown mode
+  COOLDOWN_MODE = false;
+  rateLimitFailureCount = 0;
+  console.log('✅ COOLDOWN MODE DEACTIVATED - Resuming normal trading');
+  
+  activeTraders.forEach(userId => {
+    const userSession = userSessions.get(userId);
+    if (userSession && bot) {
+      safeSendMessage(userSession.chatId,
+        `✅ COOLDOWN COMPLETE\n\n` +
+        `All tokens sold successfully.\n` +
+        `Rate limit has cooled down.\n` +
+        `Resuming normal trading operations.`
+      );
+    }
+  });
+  
+  return true;
+}
+
+async function testRateLimitRecovery(): Promise<boolean> {
+  console.log('🧪 Testing rate limit recovery with dummy quote request...');
+
+  try {
+    // Make a simple test call to Jupiter
+    const testUrl = `https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000&slippageBps=50`;
+
+    const response = await fetch(testUrl, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (response.ok) {
+      console.log('✅ Test quote successful - rate limit has cooled');
+      return true;
+    } else if (response.status === 429) {
+      console.log('❌ Test quote failed - still rate limited');
+      return false;
+    } else {
+      console.log(`⚠️ Test quote returned ${response.status} - assuming cooled`);
+      return true;
+    }
+  } catch (error: any) {
+    const isRateLimit = error?.message?.includes('Rate limit') ||
+      error?.message?.includes('429');
+
+    if (isRateLimit) {
+      console.log('❌ Test failed - still rate limited');
+      return false;
+    }
+
+    console.log('⚠️ Test error (assuming network issue, proceeding):', error?.message);
+    return true;
+  }
+}
+
+function resetCooldownCounters() {
+  rateLimitFailureCount = 0;
+  lastFailureTime = 0;
+}
+
+// ==================== SELL QUEUE FUNCTIONS ====================
+
+async function buildSellQueue(
+  tradingWallets: { kp: Keypair; address: string; privateKey: string }[],
+  baseMint: PublicKey,
+  session: UserSession
+): Promise<void> {
+  console.log('📋 Building sell queue - checking all wallets for tokens...');
+  sellQueue = [];
+
+  for (let i = 0; i < tradingWallets.length; i++) {
+    try {
+      const wallet = tradingWallets[i].kp;
+      const walletAddress = wallet.publicKey.toBase58();
+      const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4);
+
+      const tokenAccount = await getCachedTokenAccount(wallet.publicKey, baseMint);
+
+      if (!tokenAccount) {
+        console.log(`Wallet ${i + 1}: No token account`);
+        continue;
+      }
+
+      const tokenBalInfo = await solanaConnection.getTokenAccountBalance(tokenAccount, 'confirmed');
+      const tokenAmount = tokenBalInfo.value.uiAmount || 0;
+      const tokenBalance = tokenBalInfo.value.amount;
+
+      if (tokenAmount > 0) {
+        console.log(`Wallet ${i + 1}: Has ${tokenAmount.toFixed(6)} tokens - adding to sell queue`);
+        sellQueue.push({
+          wallet,
+          walletNumber: i + 1,
+          shortWallet,
+          tokenAmount,
+          tokenBalance
+        });
+      } else {
+        console.log(`Wallet ${i + 1}: No tokens`);
+      }
+
+      await sleep(500); // Small delay between checks
+    } catch (error: any) {
+      console.log(`Wallet ${i + 1}: Error checking tokens - ${error?.message}`);
+    }
+  }
+
+  console.log(`📋 Sell queue built: ${sellQueue.length} wallets with tokens`);
+
+  if (sellQueue.length > 0) {
+    safeSendMessage(session.chatId,
+      `📋 Cooldown Inventory Complete\n\n` +
+      `Wallets with tokens: ${sellQueue.length}\n` +
+      `Total wallets checked: ${tradingWallets.length}\n\n` +
+      `Preparing to sell all tokens...`
+    );
+  }
+}
+
+async function processSellQueue(
+  baseMint: PublicKey,
+  poolId: PublicKey | undefined,
+  session: UserSession
+): Promise<void> {
+  if (sellQueue.length === 0) {
+    console.log('✅ No tokens to sell - queue empty');
+    return;
+  }
+
+  isSellQueueProcessing = true;
+  console.log(`🔄 Processing sell queue: ${sellQueue.length} wallets`);
+
+  let successfulSells = 0;
+  let failedSells = 0;
+
+  for (let i = 0; i < sellQueue.length; i++) {
+    const item = sellQueue[i];
+
+    console.log(`\n[${i + 1}/${sellQueue.length}] Selling from wallet ${item.walletNumber}...`);
+    console.log(`Amount: ${item.tokenAmount.toFixed(6)} tokens`);
+
+    try {
+      // Use high priority for cooldown sells
+      let sellTx;
+      if (SWAP_ROUTING) {
+        sellTx = await getSellTxWithJupiter(item.wallet, baseMint, item.tokenBalance, true); // true = high priority
+      } else if (poolId) {
+        sellTx = await getSellTx(solanaConnection, item.wallet, baseMint, NATIVE_MINT, item.tokenBalance, poolId.toBase58());
+      }
+
+      if (!sellTx) {
+        console.log(`❌ Failed to create sell tx for wallet ${item.walletNumber}`);
+        failedSells++;
+        await sleep(3000);
+        continue;
+      }
+
+      const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
+      const txSig = await execute(sellTx, latestBlockhash, false);
+
+      if (txSig) {
+        console.log(`✅ Sell successful - Wallet ${item.walletNumber}: ${txSig}`);
+        successfulSells++;
+
+        session.tradingStats.totalSells++;
+        session.tradingStats.successfulTxs++;
+        saveSessions();
+      } else {
+        console.log(`❌ Sell execution failed - Wallet ${item.walletNumber}`);
+        failedSells++;
+      }
+
+    } catch (error: any) {
+      console.error(`❌ Sell error - Wallet ${item.walletNumber}:`, error?.message);
+      failedSells++;
+    }
+
+    // Wait between sells to avoid rate limit
+    await sleep(5000);
+  }
+
+  console.log(`\n✅ Sell queue processing complete!`);
+  console.log(`Successful: ${successfulSells}, Failed: ${failedSells}`);
+
+  safeSendMessage(session.chatId,
+    `✅ Cooldown Sell Complete\n\n` +
+    `Successful sells: ${successfulSells}\n` +
+    `Failed sells: ${failedSells}\n` +
+    `Total processed: ${sellQueue.length}\n\n` +
+    `${failedSells > 0 ? '⚠️ Some sells failed - use Export Session to recover manually\n\n' : ''}` +
+    `Preparing to resume trading...`
+  );
+
+  sellQueue = [];
+  isSellQueueProcessing = false;
+}
+
+// ==================== END SELL QUEUE FUNCTIONS ====================
+
+// ==================== END COOLDOWN FUNCTIONS ====================
 
 // Volume calculation helper
 function calculateVolumeEstimate(totalSOL: number, walletCount: number) {
@@ -1858,7 +2264,7 @@ async function startVolumeBot(session: UserSession, amountPerWallet: number) {
     }, 60000);
 
     tradingWallets.forEach(async ({ kp }, walletIndex) => {
-      await sleep((BUY_INTERVAL_MAX + BUY_INTERVAL_MIN) * walletIndex / 2);
+      await sleep((BUY_INTERVAL_MAX + BUY_INTERVAL_MIN) * walletIndex); // Removed /2 for better spacing
 
       while (true) {
         try {
@@ -1868,52 +2274,65 @@ async function startVolumeBot(session: UserSession, amountPerWallet: number) {
             break;
           }
 
+          // CHECK AND HANDLE COOLDOWN
+          if (COOLDOWN_MODE) {
+            console.log(`Wallet ${walletIndex + 1}: In cooldown mode, waiting...`);
+
+            // Only the first wallet handles cooldown recovery
+            if (walletIndex === 0 && !isSellQueueProcessing) {
+              const canProceed = await checkAndExitCooldown(tradingWallets, baseMint, poolId, currentSession);
+
+              if (canProceed) {
+                console.log(`Cooldown complete, resuming wallet ${walletIndex + 1}`);
+                // Continue to normal trading below
+              } else {
+                await sleep(10000);
+                continue;
+              }
+            } else {
+              // Other wallets just wait
+              await sleep(10000);
+              continue;
+            }
+          }
+
+          // NORMAL TRADING (not in cooldown)
           const BUY_INTERVAL = Math.round(Math.random() * (BUY_INTERVAL_MAX - BUY_INTERVAL_MIN) + BUY_INTERVAL_MIN);
           const walletAddress = kp.publicKey.toBase58();
           const shortWallet = walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4);
 
-          // Pre-check wallet balance before attempting buy
-          let walletBalance = 0;
-          let balanceCheckAttempts = 0;
-
-          while (balanceCheckAttempts < 5) {
-            try {
-              const balance = await solanaConnection.getBalance(kp.publicKey);
-              walletBalance = balance / LAMPORTS_PER_SOL;
-
-              if (walletBalance > 0) {
-                console.log(`Wallet ${walletIndex + 1} balance confirmed: ${walletBalance.toFixed(6)} SOL`);
-                break;
-              }
-
-              console.log(`Wallet ${walletIndex + 1} balance still 0, waiting... (${balanceCheckAttempts + 1}/5)`);
-              await sleep(3000);
-              balanceCheckAttempts++;
-            } catch (error) {
-              console.log(`Error checking wallet ${walletIndex + 1} balance`);
-              await sleep(3000);
-              balanceCheckAttempts++;
-            }
-          }
-
-          if (walletBalance === 0) {
-            console.log(`Wallet ${walletIndex + 1} has no balance after 5 checks, skipping this cycle`);
-            await sleep(10000); // Wait longer before trying again
-            continue;
-          }
-
+          // ---------------- Buy Part ----------------
           const buyResult = await performBuy(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
           if (!buyResult || !currentSession.botRunning) {
             console.log(`Buy failed or session stopped for user ${session.userId}`);
-            break;
+
+            // If buy failed due to rate limit, cooldown is triggered, loop will handle it
+            if (COOLDOWN_MODE) {
+              await sleep(5000);
+              continue;
+            }
+
+            // Other failure, wait and retry
+            await sleep(10000);
+            continue;
           }
 
           await sleep(3000 + Math.random() * 2000);
 
+          // ---------------- Sell Part ----------------
           const sellResult = await performSell(kp, baseMint, poolId, currentSession, walletIndex + 1, shortWallet);
           if (!sellResult || !currentSession.botRunning) {
             console.log(`Sell failed or session stopped for user ${session.userId}`);
-            break;
+
+            // If sell failed due to rate limit, cooldown is triggered
+            if (COOLDOWN_MODE) {
+              await sleep(5000);
+              continue;
+            }
+
+            // Other failure, wait and retry
+            await sleep(10000);
+            continue;
           }
 
           await sleep(BUY_INTERVAL + Math.random() * 3000);
@@ -2049,6 +2468,12 @@ async function performBuy(
   shortWallet: string
 ): Promise<boolean> {
   try {
+    // CHECK COOLDOWN MODE
+    if (COOLDOWN_MODE) {
+      console.log(`Wallet ${walletNumber}: Skipping buy - in cooldown mode`);
+      return false;
+    }
+
     // OPTIMIZED: Use cached balance instead of fresh RPC call
     const solBalance = await getCachedBalance(wallet.publicKey);
 
@@ -2093,11 +2518,11 @@ async function performBuy(
       return false;
     }
 
-    console.log(`Buy attempt: Wallet ${walletNumber}, Amount: ${buyAmount} SOL`);
+    console.log(`Attempting buy: Wallet ${walletNumber}, Amount: ${buyAmount.toFixed(6)} SOL, Balance: ${solBalance.toFixed(6)} SOL`);
 
     let tx;
     let attempts = 0;
-    const maxAttempts = 2; // OPTIMIZED: Reduced from 3
+    const maxAttempts = 3;
 
     while (attempts < maxAttempts) {
       try {
@@ -2109,35 +2534,45 @@ async function performBuy(
           throw new Error('No pool ID available');
         }
 
-        if (tx) break;
+        if (tx) {
+          console.log(`Transaction created successfully on attempt ${attempts + 1}`);
+          break;
+        }
 
         attempts++;
-        if (attempts < maxAttempts) await sleep(1000); // OPTIMIZED: Reduced from 2000
+        if (attempts < maxAttempts) await sleep(2000);
 
       } catch (txError: any) {
         attempts++;
-        console.error(`TX creation attempt ${attempts} failed:`, txError?.message);
-        if (attempts < maxAttempts) await sleep(1000);
-        else throw txError;
+        const errorMsg = txError?.message || '';
+        console.error(`Failed to get buy transaction: ${errorMsg}`);
+        
+        // DETECT RATE LIMIT
+        if (errorMsg.includes('Rate limit') || errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+          console.log('🚨 Rate limit detected in buy');
+          recordRateLimitFailure();
+          recordFailure();
+          return false; // Exit immediately
+        }
+        
+        if (attempts < maxAttempts) {
+          console.log(`Buy failed, retrying...`);
+          await sleep(2000);
+        } else {
+          throw txError;
+        }
       }
     }
 
     if (!tx) {
+      console.log(`Failed to create buy transaction after ${maxAttempts} attempts`);
       session.tradingStats.failedTxs++;
       saveSessions();
-
-      // OPTIMIZED: Throttle error notifications
-      if (session.tradingStats.failedTxs % 5 === 0) {
-        sendTradingNotification(session, 'error', {
-          type: 'BUY',
-          wallet: shortWallet,
-          error: 'Transaction creation failed'
-        });
-      }
+      recordFailure();
       return false;
     }
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed'); // OPTIMIZED: Use 'confirmed'
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
     const txSig = await execute(tx, latestBlockhash);
 
     if (txSig) {
@@ -2145,6 +2580,10 @@ async function performBuy(
       session.tradingStats.totalVolumeSOL += buyAmount;
       session.tradingStats.successfulTxs++;
       session.tradingStats.lastActivity = Date.now();
+
+      // Reset failure counter on success
+      resetCooldownCounters();
+      recordSuccess();
 
       // OPTIMIZED: Invalidate balance cache after successful buy
       const walletKey = wallet.publicKey.toBase58();
@@ -2156,7 +2595,7 @@ async function performBuy(
       userSessions.set(session.userId, session);
       saveSessions();
 
-      console.log(`Buy success - Wallet: ${walletNumber}, Amount: ${buyAmount} SOL, TX: ${txSig}`);
+      console.log(`Buy successful - User: ${session.userId}, Wallet: ${walletNumber}, Amount: ${buyAmount.toFixed(6)} SOL, TX: ${txSig}`);
 
       // OPTIMIZED: Only send notification every 3rd buy to reduce Telegram spam
       if (session.tradingStats.totalBuys % 3 === 0) {
@@ -2172,11 +2611,23 @@ async function performBuy(
     } else {
       session.tradingStats.failedTxs++;
       saveSessions();
+      recordFailure();
       return false;
     }
 
   } catch (error: any) {
     console.error(`Buy error wallet ${walletNumber}:`, error);
+    
+    // Check if it's a rate limit error
+    const errorMsg = error?.message || '';
+    if (errorMsg.includes('Rate limit') || errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+      console.log('🚨 Rate limit detected in buy (catch block)');
+      recordRateLimitFailure();
+      recordFailure();
+    } else {
+      recordFailure();
+    }
+    
     session.tradingStats.failedTxs++;
     saveSessions();
     return false;
@@ -2192,6 +2643,8 @@ async function performSell(
   shortWallet: string
 ): Promise<boolean> {
   try {
+    // Note: We DON'T skip sells during cooldown - we want to sell stuck tokens
+    
     // OPTIMIZED: Use cached balance check
     const solBalance = await getCachedBalance(wallet.publicKey);
 
@@ -2213,7 +2666,7 @@ async function performSell(
     const tokenAccount = await getCachedTokenAccount(wallet.publicKey, baseMint);
 
     if (!tokenAccount) {
-      console.log(`No token account for wallet ${walletNumber}`);
+      console.log(`No token account found for wallet ${walletNumber}`);
       return false;
     }
 
@@ -2221,24 +2674,24 @@ async function performSell(
     let tokenBalance = '0';
     let tokenAmount = 0;
     let attempts = 0;
-    const maxAttempts = 5;
+    const maxAttempts = 10;
 
     while (attempts < maxAttempts) {
       try {
-        const tokenBalInfo = await solanaConnection.getTokenAccountBalance(tokenAccount, 'confirmed'); // OPTIMIZED: 'confirmed'
+        const tokenBalInfo = await solanaConnection.getTokenAccountBalance(tokenAccount, 'confirmed');
         tokenBalance = tokenBalInfo.value.amount;
         tokenAmount = tokenBalInfo.value.uiAmount || 0;
 
         if (tokenAmount > 0) {
-          console.log(`Wallet ${walletNumber} token balance: ${tokenAmount}`);
+          console.log(`Wallet ${walletNumber} token balance: ${tokenAmount.toFixed(6)}`);
           break;
         }
       } catch (error) {
         // Account not ready yet
       }
 
-      console.log(`Waiting for tokens... wallet ${walletNumber} (${attempts + 1}/${maxAttempts})`);
-      await sleep(1500); // OPTIMIZED: Reduced from 2000
+      console.log(`Waiting for token balance... wallet ${walletNumber} (${attempts + 1}/${maxAttempts})`);
+      await sleep(2000);
       attempts++;
     }
 
@@ -2247,57 +2700,78 @@ async function performSell(
       return false;
     }
 
-    console.log(`Sell attempt: Wallet ${walletNumber}, Amount: ${tokenAmount} tokens`);
+    console.log(`Attempting sell: Wallet ${walletNumber}, Amount: ${tokenAmount.toFixed(6)} tokens`);
 
     let sellTx;
     let txAttempts = 0;
-    const maxTxAttempts = 2; // OPTIMIZED: Reduced from 3
+    const maxTxAttempts = 3;
 
     while (txAttempts < maxTxAttempts) {
       try {
         if (SWAP_ROUTING) {
-          sellTx = await getSellTxWithJupiter(wallet, baseMint, tokenBalance);
+          sellTx = await getSellTxWithJupiter(wallet, baseMint, tokenBalance, false);
         } else if (poolId) {
           sellTx = await getSellTx(solanaConnection, wallet, baseMint, NATIVE_MINT, tokenBalance, poolId.toBase58());
         } else {
           throw new Error('No pool ID available');
         }
 
-        if (sellTx) break;
+        if (sellTx) {
+          console.log(`Sell transaction created successfully on attempt ${txAttempts + 1}`);
+          break;
+        }
 
         txAttempts++;
-        if (txAttempts < maxTxAttempts) await sleep(1000); // OPTIMIZED: Reduced delay
+        if (txAttempts < maxTxAttempts) await sleep(2000);
 
       } catch (txError: any) {
         txAttempts++;
-        console.error(`Sell TX attempt ${txAttempts} failed:`, txError?.message);
-        if (txAttempts < maxTxAttempts) await sleep(1000);
-        else throw txError;
+        const errorMsg = txError?.message || '';
+        console.error(`Failed to get sell transaction: ${errorMsg}`);
+        
+        // DETECT RATE LIMIT
+        if (errorMsg.includes('Rate limit') || errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+          console.log('🚨 Rate limit detected in sell');
+          recordRateLimitFailure();
+          recordFailure();
+          
+          // If in cooldown mode, we still want to try selling after cooldown completes
+          // So we return false but don't mark as permanent failure
+          if (COOLDOWN_MODE) {
+            console.log(`Wallet ${walletNumber}: Will retry sell after cooldown`);
+          }
+          return false;
+        }
+        
+        if (txAttempts < maxTxAttempts) {
+          console.log(`Sell failed, retrying...`);
+          await sleep(2000);
+        } else {
+          throw txError;
+        }
       }
     }
 
     if (!sellTx) {
+      console.log(`Failed to create sell transaction after ${maxTxAttempts} attempts`);
       session.tradingStats.failedTxs++;
       saveSessions();
-
-      // OPTIMIZED: Throttle error notifications
-      if (session.tradingStats.failedTxs % 5 === 0) {
-        sendTradingNotification(session, 'error', {
-          type: 'SELL',
-          wallet: shortWallet,
-          error: 'Transaction creation failed'
-        });
-      }
+      console.log(`Sell failed or session stopped for user ${session.userId}`);
+      recordFailure();
       return false;
     }
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed'); // OPTIMIZED: Use 'confirmed'
+    const latestBlockhash = await solanaConnection.getLatestBlockhash('confirmed');
     const txSig = await execute(sellTx, latestBlockhash, false);
 
     if (txSig) {
       session.tradingStats.totalSells++;
       session.tradingStats.successfulTxs++;
       session.tradingStats.lastActivity = Date.now();
+
+      // Reset failure counter on success
+      resetCooldownCounters();
+      recordSuccess();
 
       // OPTIMIZED: Invalidate caches after successful sell
       const walletKey = wallet.publicKey.toBase58();
@@ -2310,7 +2784,7 @@ async function performSell(
       userSessions.set(session.userId, session);
       saveSessions();
 
-      console.log(`Sell success - Wallet: ${walletNumber}, TX: ${txSig}`);
+      console.log(`Sell successful - User: ${session.userId}, Wallet: ${walletNumber}, Amount: ${tokenAmount.toFixed(6)} UNKNOWN, TX: ${txSig}`);
 
       // OPTIMIZED: Only send notification every 3rd sell
       if (session.tradingStats.totalSells % 3 === 0) {
@@ -2326,11 +2800,23 @@ async function performSell(
     } else {
       session.tradingStats.failedTxs++;
       saveSessions();
+      recordFailure();
       return false;
     }
 
   } catch (error: any) {
     console.error(`Sell error wallet ${walletNumber}:`, error);
+    
+    // Check if it's a rate limit error
+    const errorMsg = error?.message || '';
+    if (errorMsg.includes('Rate limit') || errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+      console.log('🚨 Rate limit detected in sell (catch block)');
+      recordRateLimitFailure();
+      recordFailure();
+    } else {
+      recordFailure();
+    }
+    
     session.tradingStats.failedTxs++;
     saveSessions();
     return false;
@@ -2585,9 +3071,16 @@ if (BOT_TOKEN) {
           ? ((stats.successfulTxs / (stats.successfulTxs + stats.failedTxs)) * 100).toFixed(1)
           : '0';
 
+        const queueLength = jupiterQueue.getQueueLength();
+        const activeRequests = jupiterQueue.getActiveRequests();
+        const cacheStats = quoteCache.getStats();
+
         const statusMessage =
           `STATUS REPORT\n\n` +
           `Bot Status: ${session.botRunning ? 'ACTIVE' : 'STOPPED'}\n` +
+          `Cooldown: ${COOLDOWN_MODE ? 'YES' : 'NO'}\n` +
+          `Queue: ${queueLength} pending, ${activeRequests} active\n` +
+          `Cache: ${cacheStats.hitRate}% hit rate (${cacheStats.hits} hits, ${cacheStats.misses} misses)\n` +
           `Token: ${session.tokenName || 'Not set'} (${session.tokenSymbol || 'N/A'})\n` +
           `Trading Wallets: ${session.tradingWallets.length}\n\n` +
           `STATISTICS:\n` +

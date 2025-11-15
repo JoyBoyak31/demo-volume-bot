@@ -1,16 +1,16 @@
 {
-  "userId": 6329617050,
-  "chatId": 6329617050,
-  "createdAt": 1762683416650,
-  "lastUpdated": 1763191670992,
+  "userId": 7040052003,
+  "chatId": 7040052003,
+  "createdAt": 1763186744223,
+  "lastUpdated": 1763191670997,
   "mainWallet": {
-    "address": "B44RsqR4QdMbCCvz7piwthXr7uVfx8ov5QNgN2E4hDma",
-    "privateKey": "5W54uetU9Jj3KkrjAZ8masEcRJspz9D9L7roYnqiCUxhcGnViffRaWHMSLwZkMTMYzCacT2Zq17rwbNF3rDDdWuW",
+    "address": "7kng3e8HKc5aoKg9zN88KoT1PzGSMe2ncr4W9vofsi3e",
+    "privateKey": "42sqs5MRBg7uaHqQ38LkGgsb5rxtw6pa4GDfzxVGtw3fbTJGjqcstYbmRoGZwXpwY1wkD2s9zxUgtBSkERYR2yrC",
     "instructions": "SAVE THIS PRIVATE KEY SECURELY! You can import this wallet into Phantom, Solflare, or any Solana wallet."
   },
   "paymentWallet": {
-    "address": "5H3UHKmJ48g64N4V5TCxCtUAUcnzA2bH25TTciQwVyFe",
-    "privateKey": "5xcUgrEoiFMBaXdF8vMw5vb9MWFus6LPcywEfSBJv3fsyfjM3EAesNPZoRCmeMQ212QViKUmF7mSUK24ArhpxXoe",
+    "address": "Fu464TmtFYiU5cXh1cpABNXjVrxSUiTWAYMDQNF8RXdX",
+    "privateKey": "4oxbbFHSKdNLHztBVurEUo2buMTr1AFZ1ydveArW5fZM8mZ1W7mLyiZXmEW1Hg2A4cUXhJY4yVWXmtm9ZQYtgK25",
     "note": "This was your payment wallet. Usually empty after payment processed."
   },
   "currentTradingWallets": [],
