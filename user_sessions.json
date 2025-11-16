@@ -1,72 +1,195 @@
 {
-  "6329617050": {
-    "userId": 6329617050,
-    "chatId": 6329617050,
-    "status": "idle",
-    "requiredDeposit": 0.02,
-    "isMonitoring": true,
-    "botRunning": false,
-    "tradingWallets": [],
-    "tradingWalletsHistory": [],
-    "createdAt": 1762683416650,
-    "tradingStats": {
-      "totalBuys": 0,
-      "totalSells": 0,
-      "totalVolumeSOL": 0,
-      "successfulTxs": 0,
-      "failedTxs": 0,
-      "startTime": 0,
-      "lastActivity": 0,
-      "lastUpdateSent": 0
-    },
-    "hasPaid": true,
-    "paymentWallet": "5H3UHKmJ48g64N4V5TCxCtUAUcnzA2bH25TTciQwVyFe",
-    "paymentWalletPrivateKey": "5xcUgrEoiFMBaXdF8vMw5vb9MWFus6LPcywEfSBJv3fsyfjM3EAesNPZoRCmeMQ212QViKUmF7mSUK24ArhpxXoe",
-    "paymentAmount": 0.001,
-    "paymentConfirmed": true,
-    "selectedWalletCount": 4,
-    "distributionConfig": {
-      "mode": "auto"
-    },
-    "walletKeypair": "5W54uetU9Jj3KkrjAZ8masEcRJspz9D9L7roYnqiCUxhcGnViffRaWHMSLwZkMTMYzCacT2Zq17rwbNF3rDDdWuW",
-    "userWalletPrivateKey": "5W54uetU9Jj3KkrjAZ8masEcRJspz9D9L7roYnqiCUxhcGnViffRaWHMSLwZkMTMYzCacT2Zq17rwbNF3rDDdWuW",
-    "depositAddress": "B44RsqR4QdMbCCvz7piwthXr7uVfx8ov5QNgN2E4hDma"
-  },
   "7040052003": {
     "userId": 7040052003,
     "chatId": 7040052003,
-    "status": "idle",
+    "status": "awaiting_withdraw_address",
     "requiredDeposit": 0.02,
     "isMonitoring": true,
     "botRunning": false,
     "tradingWallets": [],
-    "tradingWalletsHistory": [],
-    "createdAt": 1763186744223,
+    "tradingWalletsHistory": [
+      [
+        {
+          "address": "5BJKN5fg9zjA2mwdTicFsEbwPxCLTGajQ559gwfzANNz",
+          "privateKey": "2g78u8jFRT7YJmH1Ft84eFEuQZYnQMMPXpzn3LouH1F92qVqwq5ToJGoMNFuLLBFTHJ4jDk8m4iBnRJLuKmvP4sg"
+        },
+        {
+          "address": "Bz6bueDQzi8RAXAnK1tcnEQv8ha9SZhT9VuVhZxXCgUi",
+          "privateKey": "foEYRREEdyjbTQngUUzMMMNMwHkbomFHGuoEVLYSWBort5wuo2b3sm6LNA5MNXqZ2QBvmVixvdZuhaNtUmy6GjL"
+        },
+        {
+          "address": "4269uAoS1AJznmoQy94QMkNBjCwXFwcbikeT64mrH2Um",
+          "privateKey": "Xo6QmE6QgDTgonPUUpbv9UyhFZgyfgXQfDQkpjw7bYMJ4gXfwRie93QrdNpcyBbmR7NNKBE5NL7m8TR7vNFC8kD"
+        },
+        {
+          "address": "8e8o61aqsEvAMXd4MtWPGRsqF2HUBLntaG79z88LsHLM",
+          "privateKey": "2BmLpfRpn2tjX1E83MW7ELNLBLukQLmwAhjkedxDeUnV61jrCjaYLd6CAm5tc9vNMY7EWY8SigxK4GevkvPmSr5"
+        },
+        {
+          "address": "AjsnQjxfnYcc9oZ2fpfmP3DabYsoLbTcK92VqPbvnByi",
+          "privateKey": "GpvDyKeYLB3tBHVGhqTD1PSe32eeayFnJ3qhirYPcV22nCH7MbM28wG4FBREFVbXUEu9NP5a5Dr5MVFd4ryriTi"
+        },
+        {
+          "address": "89kagAd2ZcQfSj9dQa1zW281aBduNz5VzpXwiLgV224",
+          "privateKey": "47JDica69vc4CrnAfUVrrpL5PvjyqevwZ3JmZc4eQWTZucDcjy4EUwJKeVDKPcuiMLQdUkFfoUAphmjcZchwwPap"
+        },
+        {
+          "address": "29nZmLjThwwLGnKQEw8KReFzuqjokT72ND1sdKVKJhHz",
+          "privateKey": "4ZAG1FJoTaimyu3eEaaiYDkMFj8jTgVG8qTmL8erbCv1Te3XbBRoToTtsQSwTx5h9HxzULWFYMcwwq22qVYBmPda"
+        },
+        {
+          "address": "5bYGyBYMqDiX4hxW61uNck7iJZGRJiAseUMDdVcyf7sx",
+          "privateKey": "2X53RBHG7mVy4u5vaHTyt83AKbfUbAQTkdX97PdeZ13Sf9MeXDW26N4MDx9YGsJC3HWJnuLNWDuxkpWxEd5TzZS2"
+        },
+        {
+          "address": "7wN7yz9uL2thBWW5S1o6KS9dcr3VFDjE6hE6aRVov7hJ",
+          "privateKey": "5QdLH2cAJ68TrxnXQaXt9pbUAJQKovyyfoep63kSU2g1YtmAVh472tKUxABbETDSbkS1e9xthCuyz1vSw9QQ7pbJ"
+        },
+        {
+          "address": "Exw8Wp8wMEhFfaxyepQjxkCrBGzi7bhez2nnmtQvVsX4",
+          "privateKey": "2M37hN8sTSPoeTBXMyk1uziBAYFN1BmH979GtTMszVyHpxeDPAcfgrhAomfFfrdfiAu8GX5XWoKywFUCduA6rwVY"
+        }
+      ],
+      [
+        {
+          "address": "D8ex6kD4Heg7oGC1jCcfzHSuiVe7ux5Cg1QJVcnyKygR",
+          "privateKey": "5tGHRafY4NURB3pBqbPzjosxrFCNRNQKsUhvaocp6bXPg3Hpr3RgYTSiu6XuHfYRwBK2HQhaR1ZtgYoLiy3Bd6rq"
+        },
+        {
+          "address": "965Qg7VpnVqBt7Tt3i7Uqk4Y96L98TK98vRhGwgeBAhS",
+          "privateKey": "4PHjfQWuJNtrTSekepyAZsKybdh1agwFDX5gXE6LMqAQiw4cu5aTinJuytKCR2xFkC8oUsuMTdA3Z9wiKoAQuUF6"
+        },
+        {
+          "address": "J1krxsyuYnqjMU4XLP2x89GYQbZToL3QMjaf7xWBsFC9",
+          "privateKey": "5R5JACTJsP7tCLgdTATXQcr6HacZzsfD2noYYNjz1Vetim4cRNh8YKayMsWZ4jFzVhSgsQHXz94Nz3QXxABvvnXP"
+        },
+        {
+          "address": "7QJFxjFzkkZsLCtj4pPujYTikmUTadPR4Rvu61fMzBc6",
+          "privateKey": "9tANLQFLBswG24amJyQMBR8VzTGrGBpACT38CKkKGYswtoDv4iYGrAe8RUi7E5dRsRrnoYhXPryvQXBSiSpsaqY"
+        },
+        {
+          "address": "5hhu74e4KwH7UjsvFXtnN5cPuR5MFV4T9GAKhabNgY7H",
+          "privateKey": "2gzPeKybQWB3aA7juLxjB6QwMrKsJTftMdtxj4TyFzUx1uQuwTymakqVhvfAYpeNXeoLBxg1v3c9VEsyqLxi7vX"
+        },
+        {
+          "address": "Aw2Udgv6RYUtpiYoBfE7hosCWQmacfy2GYBMeUhi9bUm",
+          "privateKey": "4moVfEdBU66sSrwu7Mbo1TMAQpK4K1rmoWaB8mvUiR2ko7mg4aXWW5Xd3GNDfkH7DFUbwtscHsfMZyvrChmj2tF3"
+        },
+        {
+          "address": "2MeaXJ6V4U85uD9oycVVQgqCzHLt9jB7b5Wd5wL3adHm",
+          "privateKey": "2w9zoSZ2gbhcK27YD9juDGCYcWsQSVKLVnm2x9v2L1aTLpT4UGnnscmN8Nt7S6fHYLJ2wZGWAnxtvdXyuwFWbLVZ"
+        },
+        {
+          "address": "EeMUnQzW6beWy32GkHWnMhUZ2FhoKjamKEYJp8HtqY21",
+          "privateKey": "3idSmuNooj5DhUeKz8aQN4dZwGENEicEbJXWfznSxrComQxJ1eiLweu3uMXt12gdo6kkJhenyhkqyb1wNtypS5py"
+        },
+        {
+          "address": "2Xdb16C3EnWdrcrxnVkYgS8aDoWxcfxXvh6JNgjkVtQC",
+          "privateKey": "4EVzi3J8tUJH9Wo3meEVz1ek9rUWYsNT3mU1mhsnqr46Cm3Ear7Rx2T6ckNgYhYjpnKBWGxQyBTBHwWMYB3kEErQ"
+        },
+        {
+          "address": "6hq5xicnEBtn6PytxXouJ1tQBqbAmaF7YuegABZkj4fj",
+          "privateKey": "52Shb3XumneDRkFPczDECfaznRTQK2rwvzyLj5j8xq1ErqFH2kLps4HEsP5baC4CLPWmrNxU84FCXZuoZ2s7othf"
+        }
+      ],
+      [
+        {
+          "address": "6vdZpNBC1zUBnFjYaYFdhN3Y6FStNtcgn5hcQ2YFSB48",
+          "privateKey": "5zsdWrXCmGn4F741du2XwK5NAkHu4CLfeU31fQTYFGDzqBWUP7FbuwNmCSccYMXH8iTpPn887F85y4u2A6WXhk5J"
+        },
+        {
+          "address": "2K53RoQfksui1WPreyyXBnGGo6BZ3uFHBQDy1WMcteRz",
+          "privateKey": "3kNtyPTiRpnjNpBf889tCM3ZDocdEgfpkmkB56nvSrnrv3hpUUP4hZJWkmSvQW5wwUdJDL4j5MHxq7SgDtMAFHe"
+        },
+        {
+          "address": "F7XJxsC38WbVVqVs4NYb2oKFkumXp2mjXjoNRwR3vf2R",
+          "privateKey": "4aAPNTxGdLXQnhudKXKhhGSXDTg5ffyM9bE7hNQjXfBhLrrZqLzpuPDCwenfroYCeuQQqqFJ3TDFynbQuFdYvYuw"
+        },
+        {
+          "address": "HCRvoU6pL1e8PdyvziQ2frLBy8YhZ7XrXUgY5YpwXDyQ",
+          "privateKey": "4XfhkuLNCtNCLyNtwDhVgSFiTP7uyQvpFGnXVc3YN6EzsSSaQuTQGqNmfTrrRA9uxi5rQmT1tcpSvExVGPbKYWni"
+        },
+        {
+          "address": "6E3hF7FChu7y3aXA1ipWDPxfi6FrKN1fWaNiifCgFYsa",
+          "privateKey": "2ZV2V23Ptwkfg1Y2Pt6R4F1R1rdjwuFdiZ1tcqDCbJFXxE3a99zR45j5doz3rs6SXEXHfvXHoBExKPhncfSLtcWC"
+        },
+        {
+          "address": "5ej15fuSSgWRjmdohVpSM61LobwHLGygCrQ2gvH6NJgn",
+          "privateKey": "3q7aYxYorWsxWXRX41ubwrnX2VkohviRskAzVcetWwzoFYmUW4cj1vAKGSpsogHSsTMsRwosstB3TUWAXLXb8X8z"
+        },
+        {
+          "address": "BJjv7bTZ4SoZz9hnS71ATu83JZQrtYtrCMTrE3xGEEBa",
+          "privateKey": "3daxdD2KYcujg6XoKhMwY77k3PH2msWXLY8QvkNZC7WBbJTyg3NcCAAMLagtRxbyULn3ZDJaQhPcM8afB4jRSEUx"
+        },
+        {
+          "address": "9LPRUa4wnxJ6Q9gUzceSvLXAuVgvK1ybveDFTt4imBZd",
+          "privateKey": "3Rw4f2EHhRkGaWgdEQMKFE7b26fFXrWmoqUiksY34hpcHv5Ypm5fzdyHH4KiQSUpKRQdSoZ9VNwQa54EcV8WBnro"
+        },
+        {
+          "address": "EST41jzzY2uEKwyHVS8m7kFXm82vjL6VnSE4abDYbBjN",
+          "privateKey": "5FanaNQQcgEWQoUijyC2ASRe2SqmhEzWNEnd22dEteKDT5B4vyia4m7PrFTpWi5PppJMbrNg54fXkAR3u7LGNnSk"
+        },
+        {
+          "address": "4uV5heau8h3Df43fzHskUMRrsL9s7odF8C12cUY3qwtv",
+          "privateKey": "5M6XxtijVtE11cktj8Vr2W9XELoyukT1Azy7SM87eBNUjzS5toatk9st4NYNaNUUcxKmes32hsADm6R7UrVPNx9g"
+        }
+      ],
+      [
+        {
+          "address": "7771hV21yE76RGYzUMBdMBgjDvKswCRoF5CCbZHfFYH4",
+          "privateKey": "2YPAGJrFGi8FMZA44dBjJstgybekEyBdJfENpFSWhhau6cQ9dgvsSFE4VskDWQYaziuL7stphHNMwKTX6XxEUPze"
+        },
+        {
+          "address": "72YFAvFWhSPcRaHvo7uV9QieKQrszjgTeDGMhuBGoYW5",
+          "privateKey": "2d5uCoz9eg31vCWJKCShUYKCRQzGNzdTbDW8BDsq6vCuBE6CsEtE3mrxzCibcSmMoC3nj7nakQ188Vp5VhFGXbKP"
+        },
+        {
+          "address": "BXmnzqXjiD1hJHZNFVewJEaK6QbQHUm9DrDirkZzVTTb",
+          "privateKey": "37L3HnX88i87DmRUcCNEU5ybaFedaKJ5QMTt14eTeAWDLkRoMLmqakvuqYicTrsCxxGauwGieDUA5xQVNLQMm1AM"
+        },
+        {
+          "address": "FuRrXSCi2bwYdo1WPnRLwbNDuvYpq2MoxT69XdxB1kjJ",
+          "privateKey": "3LEg4ueB5tVtUsifqaEzATfhr4GXdRtkrp6b4e5xnZT2xPFFt52K4RiMxsLU9Bpt6Y2ct3ep8LSsU7LjmxCeHjFW"
+        },
+        {
+          "address": "GWHL27YYURkvAc6UhUfLEV2pMWxW53xNScDgzDGCHF7f",
+          "privateKey": "n9Udcvt2HdswTFwVvQUF7B4uKht1zd5SbW3cxVQVUPrfLX99RPJgMMmsthvjJNopYdBGgcomGstx1QduiBz4vem"
+        },
+        {
+          "address": "BeGseLXPsseKSAyUw3NBzMeS4D6h2XC1mqfRAsw4dKC1",
+          "privateKey": "5c4BLWLR6fVctXdEf5UoPeQ1ndPx9ocy3XMAtNB93WE6mkiCMkdDzsa9sEjSXt6MR147dRpwrdgZed9HgvKhVzfP"
+        }
+      ]
+    ],
+    "createdAt": 1763267584282,
     "tradingStats": {
-      "totalBuys": 0,
-      "totalSells": 0,
-      "totalVolumeSOL": 0,
-      "successfulTxs": 0,
-      "failedTxs": 0,
-      "startTime": 0,
-      "lastActivity": 0,
-      "lastUpdateSent": 0
+      "totalBuys": 23,
+      "totalSells": 22,
+      "totalVolumeSOL": 0.032829000000000004,
+      "successfulTxs": 45,
+      "failedTxs": 2,
+      "startTime": 1763277705787,
+      "lastActivity": 1763278217939,
+      "lastUpdateSent": 1763278044924
     },
     "hasPaid": true,
-    "paymentWallet": "Fu464TmtFYiU5cXh1cpABNXjVrxSUiTWAYMDQNF8RXdX",
-    "paymentWalletPrivateKey": "4oxbbFHSKdNLHztBVurEUo2buMTr1AFZ1ydveArW5fZM8mZ1W7mLyiZXmEW1Hg2A4cUXhJY4yVWXmtm9ZQYtgK25",
+    "paymentWallet": "BJ3wgLTb2HEjGSgLJdZ2BDBYHzPqw7B9PDCuQhyGdJGG",
+    "paymentWalletPrivateKey": "4scKZXojy4YbHLbtdX2b2mt5u446gfX8HqFy7iaECBn5GrN2czHooAb1LDVJ6a7C31fzKTLozNcpRzYqAm72164x",
     "paymentAmount": 0.001,
     "paymentConfirmed": true,
-    "selectedWalletCount": 1,
+    "selectedWalletCount": 10,
     "distributionConfig": {
       "mode": "auto"
     },
     "buyAmountConfig": {
       "mode": "custom",
-      "customAmount": 0.1
+      "customAmount": 0.7
     },
-    "walletKeypair": "42sqs5MRBg7uaHqQ38LkGgsb5rxtw6pa4GDfzxVGtw3fbTJGjqcstYbmRoGZwXpwY1wkD2s9zxUgtBSkERYR2yrC",
-    "userWalletPrivateKey": "42sqs5MRBg7uaHqQ38LkGgsb5rxtw6pa4GDfzxVGtw3fbTJGjqcstYbmRoGZwXpwY1wkD2s9zxUgtBSkERYR2yrC",
-    "depositAddress": "7kng3e8HKc5aoKg9zN88KoT1PzGSMe2ncr4W9vofsi3e"
+    "walletKeypair": "cSwdqcDVyNWLjeJMVnocXj8rvPpUxphhsSHKjyBnRer1hADVirLSGt5dYAejzfrBSxb8p1zvfQXbHrPzCmhozL5",
+    "userWalletPrivateKey": "cSwdqcDVyNWLjeJMVnocXj8rvPpUxphhsSHKjyBnRer1hADVirLSGt5dYAejzfrBSxb8p1zvfQXbHrPzCmhozL5",
+    "depositAddress": "92Ra2ytXUtxCo4KEPiuLb52R36qhgJ2keKzjvmjDE7Bb",
+    "tokenAddress": "7XRNzLkfBM5N6FhxsLxtfHZTWGDCLbAazTKHhosmpump",
+    "tokenName": "3I/ATLAS AI",
+    "tokenSymbol": "ATLAS"
   }
 }

@@ -12,6 +12,10 @@ export const BUY_AMOUNT = Number(retrieveEnvVariable('BUY_AMOUNT', logger))
 export const BUY_UPPER_AMOUNT = Number(retrieveEnvVariable('BUY_UPPER_AMOUNT', logger))
 export const BUY_LOWER_AMOUNT = Number(retrieveEnvVariable('BUY_LOWER_AMOUNT', logger))
 
+// Test mode configuration
+export const TEST_MODE = process.env.TEST_MODE === 'false';
+export const TEST_MODE_TRIGGER_AFTER = parseInt(process.env.TEST_MODE_TRIGGER_AFTER || '15');
+
 export const BUY_INTERVAL_MIN = Number(retrieveEnvVariable('BUY_INTERVAL_MIN', logger))
 export const BUY_INTERVAL_MAX = Number(retrieveEnvVariable('BUY_INTERVAL_MAX', logger))
 
