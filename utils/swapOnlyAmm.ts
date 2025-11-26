@@ -248,19 +248,22 @@ export async function getSellTx(
   }
 }
 
-// -------------------- JUPITER TX --------------------
-interface JupiterQuoteResponse {
+// -------------------- JUPITER ULTRA API --------------------
+const PRIORITY_FEE = 500000; // 0.0005 SOL for faster confirmation
+const SLIPPAGE_BPS = 100; // 1%
+
+interface UltraOrderResponse {
   error?: string;
   outAmount?: string;
+  inAmount?: string;
+  priceImpactPct?: string;
+  priceImpact?: number;
+  transaction?: string;
+  prioritizationFeeLamports?: number;
   [key: string]: any;
 }
 
-interface JupiterSwapResponse {
-  swapTransaction?: string;
-  error?: string;
-  [key: string]: any;
-}
-
+// -------------------- BUY WITH ULTRA API --------------------
 export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: number) => {
   return jupiterQueue.add(async () => {
     try {
@@ -268,82 +271,61 @@ export const getBuyTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, 
       const inputMint = 'So11111111111111111111111111111111111111112'; // SOL
       const outputMint = baseMint.toBase58();
 
-      // Try to get cached quote first
-      let quoteData = quoteCache.get(inputMint, outputMint, lamports);
+      // Check cache first
+      let orderData = quoteCache.get(inputMint, outputMint, lamports);
 
-      if (!quoteData) {
-        // Cache miss - fetch new quote
-        const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${lamports}&slippageBps=100`;
+      if (!orderData) {
+        // Fetch from Ultra API
+        const orderUrl = `https://ultra-api.jup.ag/order?inputMint=${inputMint}&outputMint=${outputMint}&amount=${lamports}&slippageBps=${SLIPPAGE_BPS}&taker=${wallet.publicKey.toString()}&swapMode=ExactIn&prioritizationFeeLamports=${PRIORITY_FEE}`;
 
-        console.log(`[Queue] Fetching buy quote for ${amount.toFixed(6)} SOL (CACHE MISS)`);
+        console.log(`[Ultra] Fetching buy order for ${amount.toFixed(6)} SOL (CACHE MISS)`);
 
-        const quoteResponse = await fetch(quoteUrl, { 
+        const orderResponse = await fetch(orderUrl, { 
           headers: { 
             'accept': 'application/json',
-            'origin': 'https://jup.ag'
           } 
         });
 
-        if (!quoteResponse.ok) {
-          const errorText = await quoteResponse.text();
-          throw new Error(`Quote failed: ${quoteResponse.status} - ${errorText}`);
+        if (!orderResponse.ok) {
+          const errorText = await orderResponse.text();
+          throw new Error(`Ultra API order failed: ${orderResponse.status} - ${errorText}`);
         }
 
-        quoteData = await quoteResponse.json() as JupiterQuoteResponse;
+        orderData = await orderResponse.json() as UltraOrderResponse;
         
-        if (quoteData.error || !quoteData.outAmount) {
-          throw new Error(quoteData.error || 'No quote received');
+        if (orderData.error || !orderData.outAmount) {
+          throw new Error(orderData.error || 'No order response');
         }
 
-        // Cache the quote for reuse
-        quoteCache.set(inputMint, outputMint, lamports, quoteData);
+        // Cache the order
+        quoteCache.set(inputMint, outputMint, lamports, orderData);
+        
+        console.log(`[Ultra] Buy order received - Expected: ${(Number(orderData.outAmount) / 1e9).toFixed(2)} tokens, Price Impact: ${orderData.priceImpactPct || orderData.priceImpact}%`);
       } else {
-        console.log(`[Queue] Using cached buy quote for ${amount.toFixed(6)} SOL`);
+        console.log(`[Ultra] Using cached buy order for ${amount.toFixed(6)} SOL`);
       }
 
-      console.log(`[Queue] Fetching buy swap transaction`);
-
-      const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'accept': 'application/json',
-          'origin': 'https://jup.ag'
-        },
-        body: JSON.stringify({ 
-          userPublicKey: wallet.publicKey.toString(), 
-          wrapAndUnwrapSol: true, 
-          quoteResponse: quoteData,
-          dynamicComputeUnitLimit: true, 
-          prioritizationFeeLamports: 100000
-        })
-      });
-
-      if (!swapResponse.ok) {
-        const errorText = await swapResponse.text();
-        throw new Error(`Swap failed: ${swapResponse.status} - ${errorText}`);
+      // Ultra API returns the transaction directly in the response
+      if (!orderData.transaction) {
+        throw new Error('No transaction in Ultra API response');
       }
 
-      const swapData = await swapResponse.json() as JupiterSwapResponse;
-      
-      if (!swapData.swapTransaction) {
-        throw new Error('No swap transaction returned');
-      }
-
-      const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
-      const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
+      // Deserialize and sign the transaction
+      const txBuf = Buffer.from(orderData.transaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(new Uint8Array(txBuf));
       transaction.sign([wallet]);
       
-      console.log(`[Queue] Buy transaction created successfully`);
+      console.log(`[Ultra] Buy transaction created and signed successfully`);
       return transaction;
 
     } catch (error: any) {
-      console.error(`[Queue] Buy transaction error:`, error?.message || error);
+      console.error(`[Ultra] Buy transaction error:`, error?.message || error);
       throw error;
     }
   }, 'normal');
 };
 
+// -------------------- SELL WITH ULTRA API --------------------
 export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey, amount: string, isHighPriority: boolean = false) => {
   return jupiterQueue.add(async () => {
     try {
@@ -351,78 +333,55 @@ export const getSellTxWithJupiter = async (wallet: Keypair, baseMint: PublicKey,
       const outputMint = 'So11111111111111111111111111111111111111112'; // SOL
       const tokenAmount = parseInt(amount);
 
-      // Try to get cached quote first
-      let quoteData = quoteCache.get(inputMint, outputMint, tokenAmount);
+      // Check cache first
+      let orderData = quoteCache.get(inputMint, outputMint, tokenAmount);
 
-      if (!quoteData) {
-        // Cache miss - fetch new quote
-        const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=100`;
+      if (!orderData) {
+        // Fetch from Ultra API
+        const orderUrl = `https://ultra-api.jup.ag/order?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${SLIPPAGE_BPS}&taker=${wallet.publicKey.toString()}&swapMode=ExactIn&prioritizationFeeLamports=${PRIORITY_FEE}`;
 
-        console.log(`[Queue] Fetching sell quote for ${amount} tokens (CACHE MISS)`);
+        console.log(`[Ultra] Fetching sell order for ${amount} tokens (CACHE MISS)`);
 
-        const quoteResponse = await fetch(quoteUrl, { 
+        const orderResponse = await fetch(orderUrl, { 
           headers: { 
             'accept': 'application/json',
-            'origin': 'https://jup.ag'
           } 
         });
 
-        if (!quoteResponse.ok) {
-          const errorText = await quoteResponse.text();
-          throw new Error(`Sell quote failed: ${quoteResponse.status} - ${errorText}`);
+        if (!orderResponse.ok) {
+          const errorText = await orderResponse.text();
+          throw new Error(`Ultra API sell order failed: ${orderResponse.status} - ${errorText}`);
         }
 
-        quoteData = await quoteResponse.json() as JupiterQuoteResponse;
+        orderData = await orderResponse.json() as UltraOrderResponse;
         
-        if (quoteData.error || !quoteData.outAmount) {
-          throw new Error(quoteData.error || 'No sell quote');
+        if (orderData.error || !orderData.outAmount) {
+          throw new Error(orderData.error || 'No sell order response');
         }
 
-        // Cache the quote for reuse
-        quoteCache.set(inputMint, outputMint, tokenAmount, quoteData);
+        // Cache the order
+        quoteCache.set(inputMint, outputMint, tokenAmount, orderData);
+        
+        console.log(`[Ultra] Sell order received - Expected: ${(Number(orderData.outAmount) / 1e9).toFixed(6)} SOL, Price Impact: ${orderData.priceImpactPct || orderData.priceImpact}%`);
       } else {
-        console.log(`[Queue] Using cached sell quote for ${amount} tokens`);
+        console.log(`[Ultra] Using cached sell order for ${amount} tokens`);
       }
 
-      console.log(`[Queue] Fetching sell swap transaction`);
-
-      const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'accept': 'application/json',
-          'origin': 'https://jup.ag'
-        },
-        body: JSON.stringify({ 
-          userPublicKey: wallet.publicKey.toString(), 
-          wrapAndUnwrapSol: true, 
-          useSharedAccounts: false,
-          quoteResponse: quoteData,
-          dynamicComputeUnitLimit: true, 
-          prioritizationFeeLamports: 100000
-        })
-      });
-
-      if (!swapResponse.ok) {
-        const errorText = await swapResponse.text();
-        throw new Error(`Sell swap failed: ${swapResponse.status} - ${errorText}`);
+      // Ultra API returns the transaction directly in the response
+      if (!orderData.transaction) {
+        throw new Error('No transaction in Ultra API sell response');
       }
 
-      const swapData = await swapResponse.json() as JupiterSwapResponse;
-      
-      if (!swapData.swapTransaction) {
-        throw new Error('No sell swap transaction');
-      }
-
-      const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
-      const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
+      // Deserialize and sign the transaction
+      const txBuf = Buffer.from(orderData.transaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(new Uint8Array(txBuf));
       transaction.sign([wallet]);
       
-      console.log(`[Queue] Sell transaction created successfully`);
+      console.log(`[Ultra] Sell transaction created and signed successfully`);
       return transaction;
 
     } catch (error: any) {
-      console.error(`[Queue] Sell transaction error:`, error?.message || error);
+      console.error(`[Ultra] Sell transaction error:`, error?.message || error);
       throw error;
     }
   }, isHighPriority ? 'high' : 'normal');
