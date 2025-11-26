@@ -1,0 +1,70 @@
+{
+  "userId": 6329617050,
+  "chatId": 6329617050,
+  "createdAt": 1764162607430,
+  "lastUpdated": 1764163772349,
+  "mainWallet": {
+    "address": "7zVthzuQJvH8jxdPzZqnmq1GuvQXDyr134nwwbFDdYXB",
+    "privateKey": "2EuzWjhWHDy32vNJCjvDzgyUqaDYcmqsYAkjPyNXguUYhis1SbHVTR4YGt4hGHUn9ZB7jj1LDHWWVxh7nyAHxDF",
+    "instructions": "SAVE THIS PRIVATE KEY SECURELY! You can import this wallet into Phantom, Solflare, or any Solana wallet."
+  },
+  "paymentWallet": {
+    "address": "6Cf3jYHSRxZcK7JogEskTjyUfdiUWpWWBWxJTQ226QQu",
+    "privateKey": "4tLd61EuBQr8JngezyTzRtf8RvkxNSXPNcw9pmNNfL3oFezZ9gdzfvndersnVMbpFf9bEE6TTTRTnJbLEs555jRf",
+    "note": "This was your payment wallet. Usually empty after payment processed."
+  },
+  "currentTradingWallets": [],
+  "allTradingWallets": [
+    {
+      "number": 1,
+      "address": "8rAZpyiVQ5Pce16sdETELjLVig4NDDtNdKKeogSmXBbs",
+      "privateKey": "5r5Gn7kBUXjDEeVNsgJTUFSRY3QGKF1ESDAKL9MwJ3idC6PsC3XJTq8BJvesL13qx5hLVHSDnhqtUVcq1rp7MgLu",
+      "note": "Import this to recover any remaining SOL"
+    },
+    {
+      "number": 2,
+      "address": "54KkmygpE4VF3KjTodPH9Eg884uHF35VgF2VGdDXeY3s",
+      "privateKey": "4Q6NyN9KBWyp3kSvSgxHKf8L1opjAx7umfamdMM7paPSqnExxiCwnCfjjitwDYj67vtFeiiW5PAjoPDbcj9ohkVf",
+      "note": "Import this to recover any remaining SOL"
+    }
+  ],
+  "tradingWalletSummary": {
+    "currentActive": 0,
+    "totalEverCreated": 2,
+    "historicalBatches": 2
+  },
+  "token": {
+    "address": "7XRNzLkfBM5N6FhxsLxtfHZTWGDCLbAazTKHhosmpump",
+    "name": "3I/ATLAS AI",
+    "symbol": "ATLAS"
+  },
+  "statistics": {
+    "totalBuys": 2,
+    "totalSells": 3,
+    "totalVolumeSOL": 0.002,
+    "successfulTxs": 5,
+    "failedTxs": 0,
+    "startTime": 1764163085799,
+    "lastActivity": 1764163334790,
+    "lastUpdateSent": 1764163318660
+  },
+  "status": {
+    "botRunning": false,
+    "currentStatus": "idle",
+    "hasPaid": true,
+    "paymentConfirmed": true
+  },
+  "warnings": [
+    "NEVER share your private keys with anyone!",
+    "The bot creator/admin NEVER needs your private keys",
+    "Keep this file secure and backed up",
+    "You can use these keys to recover your wallets in any Solana wallet app",
+    "IMPORTANT: You have 2 total trading wallets created. Check ALL of them for remaining SOL!"
+  ],
+  "recoveryInstructions": {
+    "mainWallet": "Import the mainWallet privateKey into Phantom/Solflare to access your main funds",
+    "tradingWallets": "You have 2 trading wallets. Import each privateKey from 'allTradingWallets' to recover any remaining SOL",
+    "gathering": "Use the 'Withdraw SOL' function in the bot to automatically gather all funds from ALL wallets (current + old), or import each wallet manually",
+    "checkingBalances": "Import each wallet private key into a Solana wallet to check if there's any SOL remaining"
+  }
+}

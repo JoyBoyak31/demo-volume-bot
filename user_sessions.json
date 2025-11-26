@@ -191,5 +191,58 @@
     "tokenAddress": "7XRNzLkfBM5N6FhxsLxtfHZTWGDCLbAazTKHhosmpump",
     "tokenName": "3I/ATLAS AI",
     "tokenSymbol": "ATLAS"
+  },
+  "6329617050": {
+    "userId": 6329617050,
+    "chatId": 6329617050,
+    "status": "idle",
+    "requiredDeposit": 0.02,
+    "isMonitoring": true,
+    "botRunning": false,
+    "tradingWallets": [],
+    "tradingWalletsHistory": [
+      [
+        {
+          "address": "8rAZpyiVQ5Pce16sdETELjLVig4NDDtNdKKeogSmXBbs",
+          "privateKey": "5r5Gn7kBUXjDEeVNsgJTUFSRY3QGKF1ESDAKL9MwJ3idC6PsC3XJTq8BJvesL13qx5hLVHSDnhqtUVcq1rp7MgLu"
+        }
+      ],
+      [
+        {
+          "address": "54KkmygpE4VF3KjTodPH9Eg884uHF35VgF2VGdDXeY3s",
+          "privateKey": "4Q6NyN9KBWyp3kSvSgxHKf8L1opjAx7umfamdMM7paPSqnExxiCwnCfjjitwDYj67vtFeiiW5PAjoPDbcj9ohkVf"
+        }
+      ]
+    ],
+    "createdAt": 1764162607430,
+    "tradingStats": {
+      "totalBuys": 2,
+      "totalSells": 3,
+      "totalVolumeSOL": 0.002,
+      "successfulTxs": 5,
+      "failedTxs": 0,
+      "startTime": 1764163085799,
+      "lastActivity": 1764163334790,
+      "lastUpdateSent": 1764163318660
+    },
+    "hasPaid": true,
+    "paymentWallet": "6Cf3jYHSRxZcK7JogEskTjyUfdiUWpWWBWxJTQ226QQu",
+    "paymentWalletPrivateKey": "4tLd61EuBQr8JngezyTzRtf8RvkxNSXPNcw9pmNNfL3oFezZ9gdzfvndersnVMbpFf9bEE6TTTRTnJbLEs555jRf",
+    "paymentAmount": 0.001,
+    "paymentConfirmed": true,
+    "selectedWalletCount": 1,
+    "distributionConfig": {
+      "mode": "auto"
+    },
+    "buyAmountConfig": {
+      "mode": "custom",
+      "customAmount": 0.001
+    },
+    "walletKeypair": "2EuzWjhWHDy32vNJCjvDzgyUqaDYcmqsYAkjPyNXguUYhis1SbHVTR4YGt4hGHUn9ZB7jj1LDHWWVxh7nyAHxDF",
+    "userWalletPrivateKey": "2EuzWjhWHDy32vNJCjvDzgyUqaDYcmqsYAkjPyNXguUYhis1SbHVTR4YGt4hGHUn9ZB7jj1LDHWWVxh7nyAHxDF",
+    "depositAddress": "7zVthzuQJvH8jxdPzZqnmq1GuvQXDyr134nwwbFDdYXB",
+    "tokenAddress": "7XRNzLkfBM5N6FhxsLxtfHZTWGDCLbAazTKHhosmpump",
+    "tokenName": "3I/ATLAS AI",
+    "tokenSymbol": "ATLAS"
   }
 }
